@@ -1,37 +1,17 @@
-## Welcome to GitHub Pages
+## Welcome to Fish Bioenergetics 4.0
 
-You can use the [editor on GitHub](https://github.com/jim-breck/FB4/edit/gh-pages/README.md) to maintain and preview the content for your website in Markdown files.
+There are two main goals of this website: 
+- First, to make the current bioenergetics software available and easy to use; 
+- Second, to facilitate the wider use and further development of the bioenergetics approach.
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+We hope to add information such as the following:
+- Online instructions for getting started
+- Online User's Manual, with full explanations
+- List of species for which bioenergetics parameters have been published
+- Table of parameter values (a .csv file comes with the code)
+- References to published models
+- Background material for an online introduction to fish bioenergetics
+- Suggestions for fitting bioenergetics models to data
+- Ideas for future modifications
 
-### Markdown
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
-
-```markdown
-Syntax highlighted code block
-
-# Header 1
-## Header 2
-### Header 3
-
-- Bulleted
-- List
-
-1. Numbered
-2. List
-
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
-```
-
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
-
-### Jekyll Themes
-
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/jim-breck/FB4/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
-
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
