@@ -123,28 +123,19 @@ mainPanel(tableOutput("parameters"))
            radioButtons("cont_acc", 
                         label = "Contaminant Analysis Model", 
                         choices = list("Net Assimilation Efficiency (Model 1)" = 1,
-                                       "Gross Assimilation Efficiency + Constant Depuration (Model 2)" = 2,
-                                       "Gross Assimilation Efficiency + Temperature-Dependent Depuration (Model 3)" = 3),
+                                       "Gross Assimilation Efficiency + Temperature- and Size-Dependent Depuration (Model 2)" = 2),
                         selected = 1),
 #            fileInput("cont_conc_prey", label = "Contaminant Concentration in Prey Items"),
 #            fileInput("cont_ass", label = "Contaminant Assimilation Efficiencies in Prey Items"),
            numericInput("init_pred_conc",
-                        label = "Initial Predator Concentration (mg/kg)",
-                        value = NA),
-           numericInput("all_cons",
-                        label = "Allometric Constant (Models 2 & 3)",
-                        value = NA),
-           numericInput("dep_cons",
-                        label = "Depuration Constant (g/d; Models 2 & 3)",
-                        value = NA),
-           numericInput("base_temp_dep",
-                        label = "Base Temperature for Depuration (°C; Model 3)",
+                        label = "Initial Predator Concentration (ppm)",
                         value = NA)
 ),
 mainPanel(
   tabsetPanel(
     tabPanel("Contaminant Assimilation Efficiency",plotOutput("cont_ae")),
-    tabPanel("Prey Contaminant Concentration",plotOutput("prey_cont_conc"))
+    tabPanel("Prey Contaminant Concentration",plotOutput("prey_cont_conc")),
+    tabPanel("Contaminant Transfer Efficiency",plotOutput("trans_eff"))
   )
 )
 )
@@ -225,28 +216,13 @@ tabPanel("Output",
       
       selectizeInput(
         "var4", "Contaminant Analysis Variables", choices = list(
-                                                                      "Contaminant Uptake (mg)"="Contaminant.Uptake",
-                                                                      "Contaminant Elimination (mg)"="Contaminant.Elimination",
-                                                                      "Contaminant Predator Concentration (mg/kg)"="Contaminant.Predator.Concentration"),
+                                                                      "Clearance Rate (/d)"="Clearance.Rate",
+                                                                      "Contaminant Uptake (ug/d)"="Contaminant.Uptake",
+                                                                      "Contaminant Burden (ug)"="Contaminant.Burden",
+                                                                      "Contaminant Predator Concentration (ppm)"="Contaminant.Predator.Concentration"),
         multiple = TRUE,selected = c()),
 
       div(style="height: 40px;",downloadButton('downloadData', 'Download Table')),
-      
-#       selectizeInput(
-#         "varprey", "Variables by Prey (click in box for options)", choices = list(Day=Day,
-#                                                                                   Specific.Consumption.Rate.Grams=Specific.Consumption.Rate.Grams,
-#                                                                                   Specific.Consumption.Rate.Joules=Specific.Consumption.Rate.Joules,
-#                                                                                   Prey.Energy.Density=Prey.Energy.Density,
-#                                                                                   Prey.Tot.Ind.Grams=Prey.Tot.Ind.Grams, 
-#                                                                                   Prey.Tot.Ind.Joules=Prey.Tot.Ind.Joules,
-#                                                                                   Prey.Tot.Pop.Grams=Prey.Tot.Pop.Grams,
-#                                                                                   Prey.Tot.Pop.Joules=Prey.Tot.Pop.Joules,
-#                                                                                   Nitrogen.Prey=Nitrogen.Prey,
-#                                                                                   Phosphorous.Prey=Phosphorous.Prey,
-#                                                                                   N.to.P.Prey=N.to.P.Prey,
-#                                                                                   Contaminant.Uptake.Prey=Contaminant.Uptake.Prey
-#                                                                       ), multiple = TRUE,selected = c("Day","Specific.Consumption.Rate.Grams","Specific.Consumption.Rate.Joules")),
-      #downloadButton('downloaddataprey', 'Download Table by Prey'),
       
       h3("Plot Output"),
       
@@ -300,9 +276,10 @@ tabPanel("Output",
                                  "Nitrogen Growth (g)"="Nitrogen.Growth",
                                  "Phosphorous Growth (g)"="Phosphorous.Growth",
                                  "N to P Growth (mass ratio)"="N.to.P.Growth",
-                                 "Contaminant Uptake (mg)"="Contaminant.Uptake",
-                                 "Contaminant Elimination (mg)"="Contaminant.Elimination",
-                                 "Contaminant Predator Concentration (mg/kg)"="Contaminant.Predator.Concentration"),
+                                 "Clearance Rate (/d)"="Clearance.Rate",
+                                 "Contaminant Uptake (ug/d)"="Contaminant.Uptake",
+                                 "Contaminant Burden (ug)"="Contaminant.Burden",
+                                 "Contaminant Predator Concentration (ppm)"="Contaminant.Predator.Concentration"),
                   selected = "Day", multiple=FALSE),
  
       selectInput("yaxis", 
@@ -355,9 +332,10 @@ tabPanel("Output",
                                  "Nitrogen Growth (g)"="Nitrogen.Growth",
                                  "Phosphorous Growth (g)"="Phosphorous.Growth",
                                  "N to P Growth (mass ratio)"="N.to.P.Growth",
-                                 "Contaminant Uptake (mg)"="Contaminant.Uptake",
-                                 "Contaminant Elimination (mg)"="Contaminant.Elimination",
-                                 "Contaminant Predator Concentration (mg/kg)"="Contaminant.Predator.Concentration"),
+                                 "Clearance Rate (/d)"="Clearance.Rate",
+                                 "Contaminant Uptake (ug/d)"="Contaminant.Uptake",
+                                 "Contaminant Burden (ug)"="Contaminant.Burden",
+                                 "Contaminant Predator Concentration (ppm)"="Contaminant.Predator.Concentration"),
                   selected = "Temperature", multiple=FALSE),
  
       selectInput("yaxis2", 
@@ -410,9 +388,10 @@ tabPanel("Output",
                                  "Nitrogen Growth (g)"="Nitrogen.Growth",
                                  "Phosphorous Growth (g)"="Phosphorous.Growth",
                                  "N to P Growth (mass ratio)"="N.to.P.Growth",
-                                 "Contaminant Uptake (mg)"="Contaminant.Uptake",
-                                 "Contaminant Elimination (mg)"="Contaminant.Elimination",
-                                 "Contaminant Predator Concentration (mg/kg)"="Contaminant.Predator.Concentration"),
+                                 "Clearance Rate (/d)"="Clearance.Rate",
+                                 "Contaminant Uptake (ug/d)"="Contaminant.Uptake",
+                                 "Contaminant Burden (ug)"="Contaminant.Burden",
+                                 "Contaminant Predator Concentration (ppm)"="Contaminant.Predator.Concentration"),
                   selected = "Weight", multiple=FALSE)
       ),
            
