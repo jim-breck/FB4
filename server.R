@@ -1,6 +1,6 @@
 require(shiny)
 
-parms <- read.csv("Parameters_official.csv") #  Read parameter values from .csv file
+parms <- read.csv("Parameters_official.csv",stringsAsFactors = FALSE) #  Read parameter values from .csv file
 
 shinyServer(function(input, output,session) {
   
@@ -36,14 +36,20 @@ shinyServer(function(input, output,session) {
   
   Oxycal <- input$oxycal              ### Oxycalorific coefficient
   
+  calc.nut <- input$nut               ### added by JEB
+  #calc.nut <- FALSE                   ### Turn off nutrient calculations; added by JEB
+  
+  calc.contaminant <- input$contaminant  ### added by JEB
+  #calc.contaminant <- FALSE           ### Turn off contaminant calculations; added by JEB
+  
   ########################################################################
   ### Consumption parameters 
   ########################################################################
   
-  CEQ <- parms[Sp,"CEQ"]  ### equation used 
+  CEQ <- parms[Sp,"CEQ"] ### equation used 
   CA  <- parms[Sp,"CA"]  ### intercept for the allometric mass function
   CB  <- parms[Sp,"CB"]  ### slope for the allometric mass function
-  CQ  <- parms[Sp,"CQ"] ### water temperature dependent coefficient of consumption
+  CQ  <- parms[Sp,"CQ"]  ### water temperature dependent coefficient of consumption
   CTO <- parms[Sp,"CTO"] ### laboratory temperature preferendum
   CTM <- parms[Sp,"CTM"] ### maximum water temperature above which consumption ceases
   CTL <- parms[Sp,"CTL"] ### temperature at which dependence is some reduced fraction (CK4) of the max. rate
@@ -66,9 +72,9 @@ shinyServer(function(input, output,session) {
   ########################################################################
   
   REQ  <-  parms[Sp,"REQ"] ### equation used    
-  RA   <-  parms[Sp,"RA"] ### specific weight of oxygen consumed by a 1 g fish at 0°C and zero swimming speed
-  RB   <-  parms[Sp,"RB"] ### slope of the allometric mass function for standard metabolism
-  RQ   <-  parms[Sp,"RQ"] ### Q10 rate at which the function increases over relatively low temperatures
+  RA   <-  parms[Sp,"RA"]  ### specific weight of oxygen consumed by a 1 g fish at 0°C and zero swimming speed
+  RB   <-  parms[Sp,"RB"]  ### slope of the allometric mass function for standard metabolism
+  RQ   <-  parms[Sp,"RQ"]  ### Q10 rate at which the function increases over relatively low temperatures
   RTO  <-  parms[Sp,"RTO"] ### optimum temperature for respiration
   RTM  <-  parms[Sp,"RTM"] ### maximum (lethal) water temperature
   RTL  <-  parms[Sp,"RTL"] ### cutoff temperature at which the activity relationship changes
@@ -103,12 +109,12 @@ shinyServer(function(input, output,session) {
   ########################################################################
   
   PREDEDEQ <- parms[Sp,"PREDEDEQ"] ### equation used
-  PREDED   <- parms[Sp,"ED"] ### predator energy density
+  PREDED   <- parms[Sp,"ED"]     ### predator energy density
   alpha1   <- parms[Sp,"Alpha1"] ### intercept for the allometric mass function for first size range
-  beta1    <- parms[Sp,"Beta1"] ### slope of the allometric mass function for first size range
+  beta1    <- parms[Sp,"Beta1"]  ### slope of the allometric mass function for first size range
   cutoff   <- parms[Sp,"Cutoff"] ### end of first size range 
   alpha2   <- parms[Sp,"Alpha2"] ### intercept for the allometric mass function for second size range
-  beta2    <- parms[Sp,"Beta2"] ### slope of the allometric mass function for second size range
+  beta2    <- parms[Sp,"Beta2"]  ### slope of the allometric mass function for second size range
   
   ########################################################################
   ### Consumption models
@@ -120,12 +126,12 @@ shinyServer(function(input, output,session) {
   }
   
   Cf2T <- function(Temperature) { ### Temperature function equation 2 (Hanson et al. 1997; equation from Kitchell et al. 1977)
-    if (Temperature >=CTM) {ft  <-  0}  
     if (Temperature < CTM) { 
       V <- (CTM - Temperature) / (CTM - CTO)
       ft <- V^CX * exp(CX * (1 - V))
-    }
-    if(ft < 0) {ft  <-  0}
+    } else if (Temperature >=CTM) {ft  <-  0}  
+
+    if(ft < 0) {ft  <-  0}  ## prevent negative values
     return(ft)
   }
   
@@ -140,16 +146,17 @@ shinyServer(function(input, output,session) {
   
   Cf4T <- function(Temperature) { ### Temperature function equation 4; equation from Bevelhimer et al. 1985 )
     ft <- exp(CQ*Temperature + CK1*Temperature^2 + CK4*Temperature^3)
+    if(ft < 0) {ft  <-  0}  ## prevent negative values; added by JEB
     return(ft)
   }
   
   
   consumption <- function(Temperature, W, p, CEQ) { ### Consumption function
     Cmax <- CA * W ^ CB 
-    if(CEQ == 1) {ft = Cf1T(Temperature)}     
-    if(CEQ == 2) {ft = Cf2T(Temperature)}  
-    if(CEQ == 3) {ft = Cf3T(Temperature)}
-    if(CEQ == 4) {ft = Cf4T(Temperature)}
+    if(CEQ == 1) {ft = Cf1T(Temperature)   # reformatted to minimize if-tests; JEB
+    } else if(CEQ == 2) {ft = Cf2T(Temperature)
+    } else if(CEQ == 3) {ft = Cf3T(Temperature)
+    } else if(CEQ == 4) {ft = Cf4T(Temperature)}
     
     return(Cmax * p * ft)
   }
@@ -164,18 +171,18 @@ shinyServer(function(input, output,session) {
   }
   
   RACTf1T <- function(W,Temperature) { ### Temperature function equation 1 with activity component (Hanson et al. 1997; Stewart et al. 1983)
-    if(Temperature >  RTL) {VEL <- RK1 * W ^ RK4 * exp(RK5 * Temperature)}  
-    if(Temperature <= RTL) {VEL <- ACT * W ^ RK4 * exp(BACT * Temperature)}  
+    if(Temperature <= RTL) {VEL <- ACT * W ^ RK4 * exp(BACT * Temperature)
+    } else if(Temperature >  RTL) {VEL <- RK1 * W ^ RK4 * exp(RK5 * Temperature)}  
     ACTIVITY <- exp(RTO * VEL)
     return(ACTIVITY)
   }
   
   Rf2T <- function(Temperature) { ### Temperature function equation 2 (Hanson et al. 1997; Kitchell et al. 1977)
-    if (Temperature>=RTM) {ft <- 0.000001}  
     if (Temperature< RTM) {
       V <- (RTM - Temperature) / (RTM - RTO)
       ft <- V^RX * exp(RX * (1 - V))
-    }
+    } else if (Temperature>=RTM) {ft <- 0.000001}
+
     if(ft < 0) {ft <- 0.000001}  
     return(ft)
   }
@@ -185,8 +192,7 @@ shinyServer(function(input, output,session) {
     if(REQ == 1) {
       ft <- Rf1T(Temperature)  
       ACTIVITY <- RACTf1T(W,Temperature) 
-    }
-    if(REQ == 2) {
+    } else if(REQ == 2) {
       ft <- Rf2T(Temperature)
       ACTIVITY <- ACT
     }
@@ -232,10 +238,11 @@ shinyServer(function(input, output,session) {
   }
   
   egestion <- function(C, Temperature, p, EGEQ) {
-    if(EGEQ == 1) {Eg <- egestion1(C)}
-    if(EGEQ == 2) {Eg <- egestion2(C,Temperature,p)}
-    if(EGEQ == 3) {Eg <- egestion3(C,Temperature,p)}
-    if(EGEQ == 4) {Eg <- egestion4(C,Temperature)}
+    if(EGEQ == 1) {Eg <- egestion1(C)
+    } else if(EGEQ == 2) {Eg <- egestion2(C,Temperature,p)
+    } else if(EGEQ == 3) {Eg <- egestion3(C,Temperature,p)
+    } else if(EGEQ == 4) {Eg <- egestion4(C,Temperature)
+    }  # reformatted to minimize if-tests; JEB
     return(Eg)
   }
   
@@ -260,10 +267,11 @@ shinyServer(function(input, output,session) {
   }
   
   excretion <- function(C, Eg, Temperature, p, EXEQ) {
-    if(EXEQ == 1) {U <- excretion1(C,Eg)}
-    if(EXEQ == 2) {U <- excretion2(C,Temperature,p,Eg)}
-    if(EXEQ == 3) {U <- excretion3(C,Temperature,p,Eg)}
-    if(EXEQ == 4) {U <- excretion4(C,Temperature,Eg)}
+    if(EXEQ == 1) {U <- excretion1(C,Eg)
+    } else if(EXEQ == 2) {U <- excretion2(C,Temperature,p,Eg)
+    } else if(EXEQ == 3) {U <- excretion3(C,Temperature,p,Eg)
+    } else if(EXEQ == 4) {U <- excretion4(C,Temperature,Eg)
+    }  # reformatted to minimize if-checks; JEB
     return(U)
   }
   
@@ -271,7 +279,7 @@ shinyServer(function(input, output,session) {
   ### Temperature 
   ########################################################################
 
-  Temperature <- read.csv("Main Inputs/Temperature.csv") #  Read daily Temp values from .csv file
+  Temperature <- read.csv("Main Inputs/Temperature.csv",stringsAsFactors = FALSE) #  Read daily Temp values from .csv file
   Day <- Temperature[,1] # Days
   Temperature <- Temperature[,2]  # Just use the Temp values, which are in column 2
   last_day <- tail(Day, n = 1)  # get the total number of days
@@ -284,9 +292,9 @@ shinyServer(function(input, output,session) {
   ### Diet proportions and energetical contribution 
   ########################################################################
   
-  Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE)
+  Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE,stringsAsFactors = FALSE)
   Day_prey <- Diet_prop[,1] # Days
-  Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE)
+  Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE,stringsAsFactors = FALSE)
   Day_Prey_E <- Prey_E[,1] # Days
   prey_items <- (ncol(Diet_prop))-1
   last_day_prey <- tail(Day_prey, n = 1)  # get the total number of days
@@ -300,12 +308,12 @@ shinyServer(function(input, output,session) {
     Prey <- approx(Day_prey,Prey, n = last_day_prey,method="linear")$y # interpolate prey 1 energy density
     Prey <- Prey[First_day:Last_day]
     globalout_Prey <- cbind(globalout_Prey,Prey)
-    Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE)
+    Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE,stringsAsFactors = FALSE)
     Prey_E <- Prey_E[,i+1]  
     Prey_E <- approx(Day_Prey_E,Prey_E, n = last_day_prey_E,method="constant")$y # interpolate prey 1 energy density
     Prey_E <- Prey_E[First_day:Last_day]
     globalout_Prey_E <- cbind(globalout_Prey_E,Prey_E)
-    Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE)
+    Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE,stringsAsFactors = FALSE)
   }
   
   colnames(globalout_Prey) <- names(Diet_prop)[-1]
@@ -315,7 +323,7 @@ shinyServer(function(input, output,session) {
   ### Indigestible Prey 
   ########################################################################
   
-  Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE)
+  Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
   Day_ind_prey <- Ind_prey[,1] # Days
   Ind_prey_items <- (ncol(Ind_prey))-1
   last_day_ind_prey <- tail(Day_ind_prey, n = 1)  # get the total number of days
@@ -327,7 +335,7 @@ shinyServer(function(input, output,session) {
     Prey <- approx(Day_ind_prey,Prey, n = last_day_ind_prey,method="linear")$y # interpolate prey 1 energy density
     Prey <- Prey[First_day:Last_day]
     globalout_Ind_Prey <- cbind(globalout_Ind_Prey,Prey)
-    Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE)
+    Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
   }
   
   colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
@@ -336,7 +344,7 @@ shinyServer(function(input, output,session) {
   ### Predator energy density 
   ########################################################################
   
-  Predator_E <- read.csv("Main Inputs/Pred_E.csv",head=TRUE) 
+  Predator_E <- read.csv("Main Inputs/Pred_E.csv",head=TRUE,stringsAsFactors = FALSE) 
   Day_pred <- Predator_E[,1] # Days
   Pred_E <- Predator_E[,2]  # Just use the predator energy values, which are in column 2
   last_day_pred <- tail(Day_pred, n = 1)  # get the total number of days + 1
@@ -349,32 +357,35 @@ shinyServer(function(input, output,session) {
   new <- data.frame(X_Pred=last_day_pred+1)
   last_Pred_E <- predict(predict_Pred_Eplusone,new)
   Pred_E <- c(Pred_E,last_Pred_E)
+  Pred_E <- Pred_E[First_day:(Last_day+1)]  ## added by JEB
   
   pred_En_D <- function(W,day,PREDEDEQ) {
-    if(PREDEDEQ == 1) {return(Pred_E[day])}     
-    if(PREDEDEQ == 2 && W<as.numeric(cutoff)) {return((as.numeric(alpha1) + as.numeric(beta1)*W))}  
-    if(PREDEDEQ == 2 && W>=as.numeric(cutoff)) {return((as.numeric(alpha2) + as.numeric(beta2)*W))} 
-    if(PREDEDEQ == 2 && W<as.numeric(cutoff) && as.numeric(beta1) == 0) {return((as.numeric(alpha1)))}  
-    if(PREDEDEQ == 2 && W>=as.numeric(cutoff) && as.numeric(beta2) == 0) {return((as.numeric(alpha2)))} 
-    if(PREDEDEQ == 3) {return(alpha1*W^beta1)}  
+    if(PREDEDEQ == 1) {return(Pred_E[day])   
+    } else if(PREDEDEQ == 3) {return(alpha1*W^beta1)  
+    } else if(PREDEDEQ == 2) {
+      if(W <as.numeric(cutoff)) {return((as.numeric(alpha1) + as.numeric(beta1)*W))}
+      if(W>=as.numeric(cutoff)) {return((as.numeric(alpha2) + as.numeric(beta2)*W))} 
+      if(W <as.numeric(cutoff) && as.numeric(beta1) == 0) {return((as.numeric(alpha1)))}  
+      if(W>=as.numeric(cutoff) && as.numeric(beta2) == 0) {return((as.numeric(alpha2)))}
+    }  # restructured to minimize if-tests; JEB
   }
    
   ########################################################################
   ### Mortality
   ########################################################################
   
-  Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE)
+  Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE,stringsAsFactors = FALSE)
   Day_mort <- Mortality[,1] # Days
   mort_types <- (ncol(Mortality))-1
   last_day_mort <- tail(Day_mort, n = 1)  # get the total number of days
   globalout_mort <- NULL
   
-  for(i in 1:mort_types){
-    Mort <- Mortality[,i+1]
+  for(j in 1:mort_types){
+    Mort <- Mortality[,j+1]
     Mort <- approx(Day_mort,Mort, n = last_day_mort,method="constant")$y # interpolate mortality
     Mort <- Mort[First_day:Last_day]
     globalout_mort <- cbind(globalout_mort,Mort)
-    Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE)
+    Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE,stringsAsFactors = FALSE)
   }
 
 colnames(globalout_mort) <- names(Mortality)[-1]
@@ -384,24 +395,25 @@ globalout_mort$Fish_Mort_Int <- NA
 
 days <- nrow(globalout_mort)
 intervals <- 1
-previous_nat_int <- 1
-previous_nat_int_dur <- 0
-previous_fish_int <- 1
-previous_fish_int_dur <- 0
+nat_int_start <- 1
+nat_int_dur <- 0
+fish_int_start <- 1
+fish_int_dur <- 0
+
 for(i in 1:(days-1)){
-  globalout_mort$Nat_Mort_Int[i] <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],i,globalout_mort$Nat_Mort_Int[i])
-  globalout_mort$Nat_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-previous_nat_int,NA)
-  globalout_mort$Nat_Mort_Int[previous_nat_int:i] <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],i-previous_nat_int_dur,globalout_mort$Nat_Mort_Int[previous_nat_int:i])
-  globalout_mort$Nat_Mort_Int[previous_nat_int:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-previous_nat_int+1,globalout_mort$Nat_Mort_Int[previous_nat_int:i])
-  previous_nat_int_dur <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],length(globalout_mort$Nat_Mort_Int[previous_nat_int:i]),previous_nat_int_dur)
-  previous_nat_int <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],i+1,previous_nat_int)
+  nat_int_dur <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],nat_int_dur+1,nat_int_dur+1)
+  globalout_mort$Nat_Mort_Int[nat_int_start:i] <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],rep(nat_int_dur,nat_int_dur),NA)
+  globalout_mort$Nat_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-nat_int_start,NA)
+  globalout_mort$Nat_Mort_Int[nat_int_start:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-nat_int_start+1,globalout_mort$Nat_Mort_Int[nat_int_start:i])
+  nat_int_dur <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],0,nat_int_dur)
+  nat_int_start <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],i+1,nat_int_start)
   
-  globalout_mort$Fish_Mort_Int[i] <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i,globalout_mort$Fish_Mort_Int[i])
-  globalout_mort$Fish_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-previous_fish_int,NA)
-  globalout_mort$Fish_Mort_Int[previous_fish_int:i] <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i-previous_fish_int_dur,globalout_mort$Fish_Mort_Int[previous_fish_int:i])
-  globalout_mort$Fish_Mort_Int[previous_fish_int:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-previous_fish_int+1,globalout_mort$Fish_Mort_Int[previous_fish_int:i])
-  previous_fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],length(globalout_mort$Fish_Mort_Int[previous_fish_int:i]),previous_fish_int_dur)
-  previous_fish_int <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i+1,previous_fish_int)
+  fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],fish_int_dur+1,fish_int_dur+1)
+  globalout_mort$Fish_Mort_Int[fish_int_start:i] <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],rep(fish_int_dur,fish_int_dur),NA)
+  globalout_mort$Fish_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-fish_int_start,NA)
+  globalout_mort$Fish_Mort_Int[fish_int_start:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-fish_int_start+1,globalout_mort$Fish_Mort_Int[fish_int_start:i])
+  fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],0,fish_int_dur)
+  fish_int_start <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i+1,fish_int_start)
 
 }
 
@@ -422,7 +434,7 @@ globalout_individuals$day <- First_day:Last_day
 ### Reproduction
 ########################################################################
 
-Reproduction <- read.csv("Sub-Models/Reproduction/Reproduction.csv",head=TRUE)
+Reproduction <- read.csv("Sub-Models/Reproduction/Reproduction.csv",head=TRUE,stringsAsFactors = FALSE)
 Day <- Reproduction[,1] # Days
 Reproduction <- Reproduction[,2]  # Just use the Temp values, which are in column 2
 last_day <- tail(Day, n = 1)  # get the total number of days
@@ -438,11 +450,11 @@ Reproduction <- Reproduction[First_day:Last_day]
 X_Pred <- input$init_pred_conc
 CONTEQ <- input$cont_acc
 
-Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE)
+Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_conc <- Prey_conc[,1] # Days
-Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE)
+Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Prey_ass <- Prey_ass[,1] # Days
-Trans_eff <- read.csv("Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv",head=TRUE)
+Trans_eff <- read.csv("Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Trans_eff <- Trans_eff[,1] # Days
 prey_items <- (ncol(Prey_conc))-1
 last_day_conc <- tail(Day_conc, n = 1)  # get the total number of days
@@ -458,21 +470,21 @@ for(i in 1:prey_items){
   Prey_Conc <- approx(Day_conc,Prey_Conc, n = last_day_conc,method="linear")$y # interpolate prey 1 energy density
   Prey_Conc <- Prey_Conc[First_day:Last_day]
   globalout_Prey_Conc <- cbind(globalout_Prey_Conc,Prey_Conc)
-  Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE)
+  Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE,stringsAsFactors = FALSE)
   Prey_ass <- Prey_ass[,i+1]  
   Prey_ass <- approx(Day_Prey_ass,Prey_ass, n = last_day_prey_ass,method="constant")$y # interpolate prey 1 energy density
   Prey_ass <- Prey_ass[First_day:Last_day]
   globalout_Prey_ass <- cbind(globalout_Prey_ass,Prey_ass)
-  Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE)
+  Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE,stringsAsFactors = FALSE)
   Trans_eff <- Trans_eff[,i+1]  
   Trans_eff <- approx(Day_Trans_eff,Trans_eff, n = last_day_trans_eff,method="constant")$y # interpolate prey 1 energy density
   Trans_eff <- Trans_eff[First_day:Last_day]
   globalout_Trans_eff <- cbind(globalout_Trans_eff,Trans_eff)
-  Trans_eff <- read.csv("Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv",head=TRUE)
+  Trans_eff <- read.csv("Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv",head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Prey_Conc) <- names(Prey_conc)[-1]
-colnames(globalout_Prey_ass) <- names(Prey_ass)[-1]
+colnames(globalout_Prey_ass)  <- names(Prey_ass)[-1]
 colnames(globalout_Trans_eff) <- names(Trans_eff)[-1]
 
 pred_cont_conc <- function(C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,CONTEQ) {
@@ -490,11 +502,11 @@ pred_cont_conc <- function(C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,CONTEQ) {
 ### Nutrient Regeneration
 ########################################################################
 
-Phos_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Ae.csv",head=TRUE)
+Phos_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Ae <- Phos_Ae[,1] # Days
-Phos_Conc_Pred <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Pred.csv",head=TRUE)
+Phos_Conc_Pred <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Pred.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Conc_Pred <- Phos_Conc_Pred[,1] # Days
-Phos_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv",head=TRUE)
+Phos_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Conc_Prey <- Phos_Conc_Prey[,1] # Days
 
 prey_items_nut <- (ncol(Phos_Ae))-1
@@ -512,11 +524,11 @@ Phos_Conc_Pred <- approx(Day_Phos_Conc_Pred,Phos_Conc_Pred, n = last_day_Phos_Co
 Phos_Conc_Pred <- Phos_Conc_Pred[First_day:Last_day]
 globalout_Phos_Conc_Pred <- cbind(globalout_Phos_Conc_Pred,Phos_Conc_Pred)
 
-Nit_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Ae.csv",head=TRUE)
+Nit_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Ae <- Nit_Ae[,1] # Days
-Nit_Conc_Pred <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Pred.csv",head=TRUE)
+Nit_Conc_Pred <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Pred.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Conc_Pred <- Nit_Conc_Pred[,1] # Days
-Nit_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv",head=TRUE)
+Nit_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Conc_Prey <- Nit_Conc_Prey[,1] # Days
 
 prey_items_nut <- (ncol(Nit_Ae))-1
@@ -539,25 +551,25 @@ for(i in 1:prey_items_nut){
   Phos_Ae <- approx(Day_Phos_Ae,Phos_Ae, n = last_day_Phos_Ae,method="linear")$y # interpolate prey 1 energy density
   Phos_Ae <- Phos_Ae[First_day:Last_day]
   globalout_Phos_Ae <- cbind(globalout_Phos_Ae,Phos_Ae)
-  Phos_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Ae.csv",head=TRUE)
+  Phos_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
   
   Phos_Conc_Prey <- Phos_Conc_Prey[,i+1]  
   Phos_Conc_Prey <- approx(Day_Phos_Conc_Prey,Phos_Conc_Prey, n = last_day_Phos_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
   Phos_Conc_Prey <- Phos_Conc_Prey[First_day:Last_day]
   globalout_Phos_Conc_Prey <- cbind(globalout_Phos_Conc_Prey,Phos_Conc_Prey)
-  Phos_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv",head=TRUE)
+  Phos_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
   
   Nit_Ae <- Nit_Ae[,i+1]
   Nit_Ae <- approx(Day_Nit_Ae,Nit_Ae, n = last_day_Nit_Ae,method="linear")$y # interpolate prey 1 energy density
   Nit_Ae <- Nit_Ae[First_day:Last_day]
   globalout_Nit_Ae <- cbind(globalout_Nit_Ae,Nit_Ae)
-  Nit_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Ae.csv",head=TRUE)
+  Nit_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
   
   Nit_Conc_Prey <- Nit_Conc_Prey[,i+1]  
   Nit_Conc_Prey <- approx(Day_Nit_Conc_Prey,Nit_Conc_Prey, n = last_day_Nit_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
   Nit_Conc_Prey <- Nit_Conc_Prey[First_day:Last_day]
   globalout_Nit_Conc_Prey <- cbind(globalout_Nit_Conc_Prey,Nit_Conc_Prey)
-  Nit_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv",head=TRUE)
+  Nit_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Phos_Ae) <- names(Phos_Ae)[-1]
@@ -589,66 +601,71 @@ nitrogen_allocation <- function(C,n_conc_prey,AEn,weightgain,n_conc_pred) {
 ########################################################################
 
 grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { # Growth as a function of temperature, weight, p-value, prey proportion and energy density and predator energy density
-  globalout <- data.frame(matrix(NA, nrow = Fin, ncol= (53+ncol(globalout_Prey)*4))) # Create a blank dataframe to store outputs
-  colnames(globalout) <- c("Day",
-                           "Temperature",
-                           "Starting.Weight",
-                           "Weight",
-                           "Population.Number",
-                           "Population.Biomass",
-                           "Specific.Growth.Rate.Joules",
-                           "Specific.Consumption.Rate.Joules",
-                           "Specific.Egestion.Rate",
-                           "Specific.Excretion.Rate",
-                           "Specific.Respiration.Rate",
-                           "Specific.SDA.Rate",
-                           "Specific.Consumption.Rate.Grams",
-                           "Specific.Growth.Rate.Grams",
-                           "Initial.Predator.Energy.Density",
-                           "Final.Predator.Energy.Density",
-                           "Mean.Prey.Energy.Density",
-                           "Gross.Production.Grams",
-                           "Gross.Production.Joules",
-                           "Cum.Gross.Production.Grams",
-                           "Cum.Gross.Production.Joules",
-                           "Gametic.Production.Grams",
-                           "Gametic.Production.Joules",
-                           "Net.Production.Grams",
-                           "Net.Production.Joules",
-                           "Cum.Net.Production.Grams",
-                           "Cum.Net.Production.Joules",
-                           "Prey.Tot.Ind.Grams", 
-                           "Prey.Tot.Ind.Joules",
-                           "Cum.Prey.Tot.Ind.Grams", 
-                           "Cum.Prey.Tot.Ind.Joules",
-                           "Prey.Tot.Pop.Grams",
-                           "Prey.Tot.Pop.Joules",
-                           "Cum.Prey.Tot.Pop.Grams",
-                           "Cum.Prey.Tot.Pop.Joules",
-                           "Mortality.number",
-                           "Mortality.Grams",
-                           "Nitrogen.Egestion",
-                           "Phosphorous.Egestion",
-                           "N.to.P.Egestion",
-                           "Nitrogen.Excretion",
-                           "Phosphorous.Excretion",
-                           "N.to.P.Excretion",
-                           "Nitrogen.Consumption",
-                           "Phosphorous.Consumption",
-                           "N.to.P.Consumption",
-                           "Nitrogen.Growth",
-                           "Phosphorous.Growth",
-                           "N.to.P.Growth",
-                           "Clearance.Rate",
-                           "Contaminant.Uptake",
-                           "Contaminant.Burden",
-                           "Contaminant.Predator.Concentration",
-                           paste(colnames(globalout_Prey),"Joules", sep = " "),
-                           paste(colnames(globalout_Prey),"Grams", sep = " "),
-                           paste(colnames(globalout_Prey),"pop.Joules", sep = " "),
-                           paste(colnames(globalout_Prey),"pop.Grams", sep = " "))
-  
-   for(i in 1:Fin) { # Create a loop that estimates growth for the duration of the simulation (Fin)      
+  TotSpawnE <- 0  # Initialize sum of energy lost in spawning; JEB
+  TotConsG  <- 0  # Initialize sum of grams of prey consumed; used for fitting total g consumed; JEB
+  #TotEgain  <- 0  # Initialize sum of energy gained in consumption; JEB
+  if(outpt != "End") {  # Daily values not needed if only fitting final weight or consumption
+    globalout <- data.frame(matrix(NA, nrow = Fin, ncol= (53+ncol(globalout_Prey)*4))) # Create a blank dataframe to store outputs
+    colnames(globalout) <- c("Day",
+                             "Temperature",
+                             "Starting.Weight",
+                             "Weight",
+                             "Population.Number",
+                             "Population.Biomass",
+                             "Specific.Growth.Rate.Joules",
+                             "Specific.Consumption.Rate.Joules",
+                             "Specific.Egestion.Rate",
+                             "Specific.Excretion.Rate",
+                             "Specific.Respiration.Rate",
+                             "Specific.SDA.Rate",
+                             "Specific.Consumption.Rate.Grams",
+                             "Specific.Growth.Rate.Grams",
+                             "Initial.Predator.Energy.Density",
+                             "Final.Predator.Energy.Density",
+                             "Mean.Prey.Energy.Density",
+                             "Gross.Production.Grams",
+                             "Gross.Production.Joules",
+                             "Cum.Gross.Production.Grams",
+                             "Cum.Gross.Production.Joules",
+                             "Gametic.Production.Grams",
+                             "Cum.Gametic.Production.Joules", # need total spawning E; JEB
+                             "Net.Production.Grams",
+                             "Net.Production.Joules",
+                             "Cum.Net.Production.Grams",
+                             "Cum.Net.Production.Joules",
+                             "Prey.Tot.Ind.Grams", 
+                             "Prey.Tot.Ind.Joules",
+                             "Cum.Prey.Tot.Ind.Grams", 
+                             "Cum.Prey.Tot.Ind.Joules",
+                             "Prey.Tot.Pop.Grams",
+                             "Prey.Tot.Pop.Joules",
+                             "Cum.Prey.Tot.Pop.Grams",
+                             "Cum.Prey.Tot.Pop.Joules",
+                             "Mortality.number",
+                             "Mortality.Grams",
+                             "Nitrogen.Egestion",
+                             "Phosphorous.Egestion",
+                             "N.to.P.Egestion",
+                             "Nitrogen.Excretion",
+                             "Phosphorous.Excretion",
+                             "N.to.P.Excretion",
+                             "Nitrogen.Consumption",
+                             "Phosphorous.Consumption",
+                             "N.to.P.Consumption",
+                             "Nitrogen.Growth",
+                             "Phosphorous.Growth",
+                             "N.to.P.Growth",
+                             "Clearance.Rate",
+                             "Contaminant.Uptake",
+                             "Contaminant.Burden",
+                             "Contaminant.Predator.Concentration",
+                             paste(colnames(globalout_Prey),"Joules", sep = " "),
+                             paste(colnames(globalout_Prey),"Grams", sep = " "),
+                             paste(colnames(globalout_Prey),"pop.Joules", sep = " "),
+                             paste(colnames(globalout_Prey),"pop.Grams", sep = " "))
+  }  # end of if(outpt != "End"); JEB
+  #
+  for(i in 1:Fin) { # Create a loop that estimates growth for the duration of the simulation (Fin)      
 
     if(input$pop_mort==TRUE){ 
       Ind2 <- globalout_individuals[i,2] # Population mortality
@@ -659,20 +676,28 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     
     Pred_E_i <- pred_En_D(W=W,day=i,PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
     Pred_E_iplusone <- pred_En_D(W=W,day=(i+1),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
-    Cons <- consumption(Temperature=Temperature[i],p=p, W=Init_W, CEQ=CEQ)* # Consumption in J/g
+    Cons.ipW <- consumption(Temperature=Temperature[i],p=p, W=W, CEQ=CEQ)  # added by JEB
+    # Cons <- consumption(Temperature=Temperature[i],p=p, W=W, CEQ=CEQ)* # Consumption in J/g
+    Cons <- Cons.ipW* # Consumption in J/g  # added by JEB
       sum(globalout_Prey[i,]*globalout_Prey_E[i,])
-    Cons_prey_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in J
-                                  (globalout_Prey[i,]*globalout_Prey_E[i,])*W))
-    colnames(Cons_prey_J) <- paste(colnames(Cons_prey_J),"Joules", sep = " ")
-    Cons_prey_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in g
-                                  (globalout_Prey[i,]*W)))
-    colnames(Cons_prey_G) <- paste(colnames(Cons_prey_G),"Grams", sep = " ")
-    Cons_prey_pop_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in J
-                                      (globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind))
-    colnames(Cons_prey_pop_J) <- paste(colnames(Cons_prey_pop_J),"pop.Joules", sep = " ")
-    Cons_prey_pop_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in g
-                                      (globalout_Prey[i,]*W*Ind)))
-    colnames(Cons_prey_pop_G) <- paste(colnames(Cons_prey_pop_G),"pop.Grams", sep = " ")
+    if(outpt != "End") {  # Daily values not needed if only fitting final weight or cons
+      # Cons_prey_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in J
+      Cons_prey_J <- data.frame(t(Cons.ipW* # Consumption by prey in J  # added by JEB
+                                    (globalout_Prey[i,]*globalout_Prey_E[i,])*W))
+      colnames(Cons_prey_J) <- paste(colnames(Cons_prey_J),"Joules", sep = " ")
+      # Cons_prey_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in g
+      Cons_prey_G <- data.frame(t(Cons.ipW* # Consumption by prey in g  # added by JEB
+                                    (globalout_Prey[i,]*W)))
+      colnames(Cons_prey_G) <- paste(colnames(Cons_prey_G),"Grams", sep = " ")
+      # Cons_prey_pop_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in J
+      Cons_prey_pop_J <- data.frame(t(Cons.ipW* # Population consumption by prey in J  # added by JEB
+                                        (globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind))
+      colnames(Cons_prey_pop_J) <- paste(colnames(Cons_prey_pop_J),"pop.Joules", sep = " ")
+      # Cons_prey_pop_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in g
+      Cons_prey_pop_G <- data.frame(t(Cons.ipW* # Population consumption by prey in g  # added by JEB
+                                        (globalout_Prey[i,]*W*Ind)))
+      colnames(Cons_prey_pop_G) <- paste(colnames(Cons_prey_pop_G),"pop.Grams", sep = " ")
+    }
     Eg  <- egestion(C=Cons,Temperature=Temperature[i],p=p, EGEQ=EGEQ) # Egestion in J/g
     Ex  <- excretion(C=Cons, Eg=Eg,Temperature=Temperature[i], p=p, EXEQ=EXEQ) # Excretion in J/g
     SpecDA  <- SpDynAct(C=Cons,Eg=Eg) # Specific dynamic action in J/g 
@@ -681,29 +706,42 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     G <-  Cons - (Res + Eg + Ex + SpecDA) # Energy put towards growth in J/g
     
     egain  <-  (G * W)      # net energy gain in J
-    
-    if(PREDEDEQ == 3) {
-      finalwt <- ((egain+(Pred_E_i*W))/alpha1)^(1/(beta1+1))
-    }else if(PREDEDEQ == 2){
-      alpha <- ifelse(W<as.numeric(cutoff),alpha1,alpha2)
-      beta <-  ifelse(W<as.numeric(cutoff),beta1,beta2)
-      finalwt <- (-alpha + sqrt(alpha^2 + (4*beta*(W*(alpha+beta*W)+egain))))/(2*beta)
-    }else{
-      finalwt <- (egain+(Pred_E_i*W))/Pred_E_iplusone
-    }
-    #(egain+(Pred_E_i*W))/Pred_E_iplusone  # Predator weight at end of current day (g)
-    
-    weightgain  <-  finalwt-W  	#change in g/day
-    
-    if(input$spawn==TRUE){ # Spwaning function
+    #Now account for spawning loss of energy; JEB
+    if(input$spawn==TRUE){ # Spawning function
       spawn <- Reproduction[i]
     }else{
       spawn <- 0
     }
+    # I think spawning should appear as another daily loss, so use spawn*W*Pred_E_i; JEB
+    #   Not spawn at end of day.
+    #TotSpawnE <- TotSpawnE + spawn*W*Pred_E_i  # Better to spawn during day i; Total E lost in reproduction; JEB
+    #TotSpawnE <- TotSpawnE + spawn*finalwt*Pred_E_i  # Caution! If using finalwt, then use Pred_E_iplusone to balance energy; Total E lost in reproduction; JEB
+    SpawnE <- spawn*W*Pred_E_i  # use W at start of day and energy density at start of day; JEB
+    TotSpawnE <- TotSpawnE + SpawnE  # Cumulative Total Energy lost in reproduction so far; JEB
     
-    Cons_cont <- consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)*globalout_Prey[i,]*W
+    # Calculate finalwt = weight at end of day i, and corresponding Predator energy density at end of day i; JEB
+    if(PREDEDEQ == 3) {
+      finalwt <- ((egain -SpawnE +(Pred_E_i*W))/alpha1)^(1/(beta1+1))
+      Pred_E_iplusone <- pred_En_D(W=finalwt,day=(i),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
+    }else if(PREDEDEQ == 2){
+      alpha <- ifelse(W<as.numeric(cutoff),alpha1,alpha2)
+      beta <-  ifelse(W<as.numeric(cutoff),beta1,beta2)
+      finalwt <- (-alpha + sqrt(alpha*alpha + 4*beta*(W*(alpha+beta*W) +egain -SpawnE)))/(2*beta)
+      Pred_E_iplusone <- pred_En_D(W=finalwt,day=(i),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
+    }else{
+      Pred_E_iplusone <- pred_En_D(W=W,day=(i+1),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g) is from csv file
+      finalwt <- (egain -SpawnE +(Pred_E_i*W))/Pred_E_iplusone  # For PREDEDEQ ==1, Pred_E_iplusone
+    }
+
+    #(egain+(Pred_E_i*W))/Pred_E_iplusone  # Predator weight at end of current day (g)
     
-    if(input$nut==TRUE){
+    weightgain  <-  finalwt-W  	#change in g/day
+    
+
+    #Cons_cont <- consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)*globalout_Prey[i,]*W
+    Cons_cont <- Cons.ipW*globalout_Prey[i,]*W  # avoid call to Consumption(); JEB
+    
+    if(calc.nut==TRUE){
       Phos <- phosphorous_allocation(C=Cons_cont,p_conc_prey=globalout_Phos_Conc_Prey[i,],AEp=globalout_Phos_Ae[i,],weightgain=weightgain,p_conc_pred=globalout_Phos_Conc_Pred[i,])
       Nit <- nitrogen_allocation(C=Cons_cont,n_conc_prey=globalout_Nit_Conc_Prey[i,],AEn=globalout_Nit_Ae[i,],weightgain=weightgain,n_conc_pred=globalout_Nit_Conc_Pred[i,])
     } else{
@@ -711,85 +749,93 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
       Nit <- NA
     }
     
-    if(input$contaminant==TRUE){
+    if(calc.contaminant==TRUE){
       Cont <- pred_cont_conc(C=Cons_cont,W=finalwt,Temperature=Temperature,X_Prey=globalout_Prey_Conc[i,],X_Pred=X_Pred,TEx=globalout_Trans_eff[i,],X_ae=globalout_Prey_ass[i,],CONTEQ=CONTEQ)  
       X_Pred <- Cont[4]
     } else {
       Cont <- NA
     }
     
-    globalout[i,"Day"] <- Day_Temp[i]
-    globalout[i,"Temperature"]<-Temperature[i]
-    globalout[i,"Starting.Weight"]<-W
-    globalout[i,"Weight"]<-finalwt-(spawn*finalwt)
-    globalout[i,"Population.Number"]<-Ind2
-    globalout[i,"Population.Biomass"]<-finalwt*Ind
-    globalout[i,"Specific.Growth.Rate.Joules"]<-G
-    globalout[i,"Specific.Consumption.Rate.Joules"]<-Cons
-    globalout[i,"Specific.Egestion.Rate"]<-Eg
-    globalout[i,"Specific.Excretion.Rate"]<-Ex
-    globalout[i,"Specific.Respiration.Rate"]<-Res
-    globalout[i,"Specific.SDA.Rate"]<-SpecDA
-    globalout[i,"Specific.Consumption.Rate.Grams"]<-Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])
-    globalout[i,"Specific.Growth.Rate.Grams"]<-G/sum(globalout_Prey[i,]*globalout_Prey_E[i,])
-    globalout[i,"Initial.Predator.Energy.Density"]<-Pred_E_i
-    globalout[i,"Final.Predator.Energy.Density"]<-Pred_E_iplusone
-    globalout[i,"Mean.Prey.Energy.Density"]<-sum(globalout_Prey[i,]*globalout_Prey_E[i,])
-    globalout[i,"Gross.Production.Grams"]<-(Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i
-    globalout[i,"Gross.Production.Joules"]<-(Cons +Res + Eg + Ex + SpecDA)*W
-    globalout[i,"Cum.Gross.Production.Grams"]<-cumsum((Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i)
-    globalout[i,"Cum.Gross.Production.Joules"]<-cumsum((Cons +Res + Eg + Ex + SpecDA)*W)
-    globalout[i,"Gametic.Production.Grams"]<-spawn*finalwt
-    globalout[i,"Gametic.Production.Joules"]<-spawn*finalwt*Pred_E_i
-    globalout[i,"Net.Production.Grams"]<-weightgain
-    globalout[i,"Net.Production.Joules"]<-egain
-    globalout[i,"Cum.Net.Production.Grams"]<-cumsum(weightgain)
-    globalout[i,"Cum.Net.Production.Joules"]<-cumsum(egain)
-    globalout[i,"Prey.Tot.Ind.Grams"]<-Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W
-    globalout[i,"Prey.Tot.Ind.Joules"]<-Cons*W
-    globalout[i,"Cum.Prey.Tot.Ind.Grams"]<-cumsum(Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W)
-    globalout[i,"Cum.Prey.Tot.Ind.Joules"]<-cumsum(Cons*W)
-    globalout[i,"Prey.Tot.Pop.Grams"]<-Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind
-    globalout[i,"Prey.Tot.Pop.Joules"]<-Cons*W*Ind
-    globalout[i,"Cum.Prey.Tot.Pop.Grams"]<-cumsum(Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind)
-    globalout[i,"Cum.Prey.Tot.Pop.Joules"]<-cumsum(Cons*W*Ind)
-    globalout[i,"Mortality.number"]<-Ind-Ind2
-    globalout[i,"Mortality.Grams"]<-(Ind-Ind2)*W
-    globalout[i,"Nitrogen.Egestion"]<-Nit[4]
-    globalout[i,"Phosphorous.Egestion"]<-Phos[4]
-    globalout[i,"N.to.P.Egestion"]<-Nit[4]/Phos[4]
-    globalout[i,"Nitrogen.Excretion"]<-Nit[3]
-    globalout[i,"Phosphorous.Excretion"]<-Phos[3]
-    globalout[i,"N.to.P.Excretion"]<-Nit[3]/Phos[3]
-    globalout[i,"Nitrogen.Consumption"]<-Nit[1]
-    globalout[i,"Phosphorous.Consumption"]<-Phos[1]
-    globalout[i,"N.to.P.Consumption"]<-Nit[1]/Phos[1]
-    globalout[i,"Nitrogen.Growth"]<-Nit[2]
-    globalout[i,"Phosphorous.Growth"]<-Phos[2]
-    globalout[i,"N.to.P.Growth"]<-Nit[2]/Phos[2]
-    globalout[i,"Clearance.Rate"]<-Cont[1]
-    globalout[i,"Contaminant.Uptake"]<-Cont[2]
-    globalout[i,"Contaminant.Burden"]<-Cont[3]
-    globalout[i,"Contaminant.Predator.Concentration"]<-Cont[4]
-    globalout[i,paste(colnames(globalout_Prey),"Joules", sep = " ")]<-Cons_prey_J
-    globalout[i,paste(colnames(globalout_Prey),"Grams", sep = " ")]<-Cons_prey_G
-    globalout[i,paste(colnames(globalout_Prey),"pop.Joules", sep = " ")]<-Cons_prey_pop_J
-    globalout[i,paste(colnames(globalout_Prey),"pop.Grams", sep = " ")]<-Cons_prey_pop_G
-    
+    if(outpt != "End") {  # Daily values not needed if only fitting final weight or cons
+      globalout[i,"Day"] <- Day_Temp[i]
+      globalout[i,"Temperature"]<-Temperature[i]
+      globalout[i,"Starting.Weight"]<-W
+      #globalout[i,"Weight"]<-finalwt-(spawn*finalwt)
+      globalout[i,"Weight"]<-finalwt  # spawning loss already accounted for; JEB
+      globalout[i,"Population.Number"]<-Ind2
+      globalout[i,"Population.Biomass"]<-finalwt*Ind
+      globalout[i,"Specific.Growth.Rate.Joules"]<-G
+      globalout[i,"Specific.Consumption.Rate.Joules"]<-Cons
+      globalout[i,"Specific.Egestion.Rate"]<-Eg
+      globalout[i,"Specific.Excretion.Rate"]<-Ex
+      globalout[i,"Specific.Respiration.Rate"]<-Res
+      globalout[i,"Specific.SDA.Rate"]<-SpecDA
+      globalout[i,"Specific.Consumption.Rate.Grams"]<-Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])
+      globalout[i,"Specific.Growth.Rate.Grams"]<-G/sum(globalout_Prey[i,]*globalout_Prey_E[i,])
+      globalout[i,"Initial.Predator.Energy.Density"]<-Pred_E_i
+      globalout[i,"Final.Predator.Energy.Density"]<-Pred_E_iplusone
+      globalout[i,"Mean.Prey.Energy.Density"]<-sum(globalout_Prey[i,]*globalout_Prey_E[i,])
+      globalout[i,"Gross.Production.Grams"]<-(Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i
+      globalout[i,"Gross.Production.Joules"]<-(Cons +Res + Eg + Ex + SpecDA)*W
+      globalout[i,"Cum.Gross.Production.Grams"]<-cumsum((Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i)
+      globalout[i,"Cum.Gross.Production.Joules"]<-cumsum((Cons +Res + Eg + Ex + SpecDA)*W)
+      globalout[i,"Gametic.Production.Grams"]<-spawn*W  # JEB; was spawn*finalwt
+      globalout[i,"Cum.Gametic.Production.Joules"]<-TotSpawnE # Cumulative energy for spawning; JEB
+      globalout[i,"Net.Production.Grams"]<-weightgain  # includes spawning losses; JEB
+      globalout[i,"Net.Production.Joules"]<-egain  # not including spawning; JEB
+      globalout[i,"Cum.Net.Production.Grams"]<-cumsum(weightgain)
+      globalout[i,"Cum.Net.Production.Joules"]<-cumsum(egain)
+      globalout[i,"Prey.Tot.Ind.Grams"]<-Cons*W/sum(globalout_Prey[i,]*globalout_Prey_E[i,])
+      globalout[i,"Prey.Tot.Ind.Joules"]<-Cons*W
+      globalout[i,"Cum.Prey.Tot.Ind.Grams"]<-cumsum(Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W)
+      globalout[i,"Cum.Prey.Tot.Ind.Joules"]<-cumsum(Cons*W)
+      globalout[i,"Prey.Tot.Pop.Grams"]<-Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind
+      globalout[i,"Prey.Tot.Pop.Joules"]<-Cons*W*Ind
+      globalout[i,"Cum.Prey.Tot.Pop.Grams"]<-cumsum(Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind)
+      globalout[i,"Cum.Prey.Tot.Pop.Joules"]<-cumsum(Cons*W*Ind)
+      globalout[i,"Mortality.number"]<-Ind-Ind2
+      globalout[i,"Mortality.Grams"]<-(Ind-Ind2)*W
+      globalout[i,"Nitrogen.Egestion"]<-Nit[4]
+      globalout[i,"Phosphorous.Egestion"]<-Phos[4]
+      globalout[i,"N.to.P.Egestion"]<-Nit[4]/Phos[4]
+      globalout[i,"Nitrogen.Excretion"]<-Nit[3]
+      globalout[i,"Phosphorous.Excretion"]<-Phos[3]
+      globalout[i,"N.to.P.Excretion"]<-Nit[3]/Phos[3]
+      globalout[i,"Nitrogen.Consumption"]<-Nit[1]
+      globalout[i,"Phosphorous.Consumption"]<-Phos[1]
+      globalout[i,"N.to.P.Consumption"]<-Nit[1]/Phos[1]
+      globalout[i,"Nitrogen.Growth"]<-Nit[2]
+      globalout[i,"Phosphorous.Growth"]<-Phos[2]
+      globalout[i,"N.to.P.Growth"]<-Nit[2]/Phos[2]
+      globalout[i,"Clearance.Rate"]<-Cont[1]
+      globalout[i,"Contaminant.Uptake"]<-Cont[2]
+      globalout[i,"Contaminant.Burden"]<-Cont[3]
+      globalout[i,"Contaminant.Predator.Concentration"]<-Cont[4]
+      globalout[i,paste(colnames(globalout_Prey),"Joules", sep = " ")]<-Cons_prey_J
+      globalout[i,paste(colnames(globalout_Prey),"Grams", sep = " ")]<-Cons_prey_G
+      globalout[i,paste(colnames(globalout_Prey),"pop.Joules", sep = " ")]<-Cons_prey_pop_J
+      globalout[i,paste(colnames(globalout_Prey),"pop.Grams", sep = " ")]<-Cons_prey_pop_G
+    }
     #globalout<-cbind(globalout,Cons_prey)
-    
-    W <- finalwt-(spawn*finalwt) # Weight at the end of the day serves as the starting weight for the next day
+    TotConsG  <- TotConsG + W*Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])  # Tot g cons; JEB
+    # TotSpawnE is total energy lost at spawning; value now calculated earlier and passed in globalout; JEB
+    #W <- finalwt-(spawn*finalwt) # spawning loss is accounted for earlier
+    W <- finalwt  # Weight at the end of the day serves as the starting weight for the next day
     Ind <- Ind2                
   }
-  globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")] <- 
-    cumsum( globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")])
-  if(outpt == "vector") {return(globalout)} 
-  #if(outpt == "vector") {return(globaloutprey)} 
-  if(outpt == "final" && fit.to=="Weight")  {return(globalout[Fin,4])} 
-  if(outpt == "final" && fit.to=="Consumption")  {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Starting.Weight']))}
-  if(outpt == "final" && fit.to=="p-value")  {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Starting.Weight']))}
+  if(outpt != "End") {  # Daily values not needed if only fitting final weight or cons
+    globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")] <- 
+      cumsum( globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")])
+  }
+  if(outpt == "vector")                         {return(globalout)} 
+  #if(outpt == "vector") {return(globaloutprey)} # 
+  if(outpt == "End" && fit.to=="Weight")        {return(W)} # only ending W value is needed; JEB
+  if(outpt == "End" && fit.to=="Consumption")   {return(TotConsG)} # only ending Total Consumption value is needed; JEB
+  if(outpt == "final" && fit.to=="Weight")      {return(globalout[Fin,4])} 
+  if(outpt == "final" && fit.to=="Consumption") {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Starting.Weight']))}
+  if(outpt == "final" && fit.to=="p-value")     {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Starting.Weight']))}
   
-}
+}  # end of function grow()
    
 
 ########################################################################
@@ -859,7 +905,7 @@ grow_ration <- function(Temperature, W, outpt, globalout_Prey, globalout_Prey_E)
     
     Cons_cont <- Ration*globalout_Prey[i,]
     
-    if(input$nut==TRUE){
+    if(calc.nut==TRUE){
       Phos <- phosphorous_allocation(C=Cons_cont,p_conc_prey=globalout_Phos_Conc_Prey[i,],AEp=globalout_Phos_Ae[i,],weightgain=weightgain,p_conc_pred=globalout_Phos_Conc_Pred[i,])
       Nit <- nitrogen_allocation(C=Cons_cont,n_conc_prey=globalout_Nit_Conc_Prey[i,],AEn=globalout_Nit_Ae[i,],weightgain=weightgain,n_conc_pred=globalout_Phos_Conc_Pred[i,])
     } else{
@@ -867,7 +913,7 @@ grow_ration <- function(Temperature, W, outpt, globalout_Prey, globalout_Prey_E)
       Nit <- NA
     }
     
-    if(input$contaminant==TRUE){
+    if(calc.contaminant==TRUE){
       Cont <- pred_cont_conc(C=Cons_cont,W=finalwt,Temperature=Temperature,X_Prey=globalout_Prey_Conc[i,],X_Pred=X_Pred,X_ae=globalout_Prey_ass[i,],CONTEQ=CONTEQ)  
       X_Pred <- Cont[4]
     } else {
@@ -939,7 +985,7 @@ grow_ration <- function(Temperature, W, outpt, globalout_Prey, globalout_Prey_E)
   if(outpt == "final" && fit.to=="Weight")  {return(globalout[Fin,4])} 
   if(outpt == "final" && fit.to=="Consumption")  {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
   if(outpt == "final" && fit.to=="p-value")  {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
-}
+}  # end of function grow_ration()
 
 ########################################################################
 ### Growth Function using fixed ration
@@ -1009,7 +1055,7 @@ grow_ration_prey <- function(Temperature, W, outpt, globalout_Prey, globalout_Pr
     
     Cons_cont <- Ration*globalout_Prey[i,]
     
-    if(input$nut==TRUE){
+    if(calc.nut==TRUE){
       Phos <- phosphorous_allocation(C=Cons_cont,p_conc_prey=globalout_Phos_Conc_Prey[i,],AEp=globalout_Phos_Ae[i,],weightgain=weightgain,p_conc_pred=globalout_Phos_Conc_Pred[i,])
       Nit <- nitrogen_allocation(C=Cons_cont,n_conc_prey=globalout_Nit_Conc_Prey[i,],AEn=globalout_Nit_Ae[i,],weightgain=weightgain,n_conc_pred=globalout_Phos_Conc_Pred[i,])
     } else{
@@ -1017,7 +1063,7 @@ grow_ration_prey <- function(Temperature, W, outpt, globalout_Prey, globalout_Pr
       Nit <- NA
     }
     
-    if(input$contaminant==TRUE){
+    if(calc.contaminant==TRUE){
       Cont <- pred_cont_conc(C=Cons_cont,W=finalwt,Temperature=Temperature,X_Prey=globalout_Prey_Conc[i,],X_Pred=X_Pred,X_ae=globalout_Prey_ass[i,],CONTEQ=CONTEQ)  
       X_Pred <- Cont[4]
     } else {
@@ -1089,7 +1135,7 @@ grow_ration_prey <- function(Temperature, W, outpt, globalout_Prey, globalout_Pr
   if(outpt == "final" && fit.to=="Weight")  {return(globalout[Fin,4])} 
   if(outpt == "final" && fit.to=="Consumption")  {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
   if(outpt == "final" && fit.to=="p-value")  {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
-}
+}  # end of function grow_ration_prey()
 
 ########################################################################
 ### binary search algorithm for p-value 
@@ -1097,88 +1143,38 @@ grow_ration_prey <- function(Temperature, W, outpt, globalout_Prey, globalout_Pr
 
   p <- 0.3 # Need some value to start the fitting process for p-value
   W.tol  <- 0.0001  # Predicted W must be within W.tol of the specified W for an adequate p-fit.
-  max.iter <- 20 # Max number of iterations of binary search
+  max.iter <- 25 # Max number of iterations of binary search (increased from 20 to 25; JEB)
   
   fit.p <- function(p, IW, FW, W.tol, max.iter) {
     W      <- IW
     n.iter <- 0  # Counter for number of iterations
     p.max  <- 5.00  # current max
     p.min  <- 0.001  # current min
-    outpt <- "final" # desire only the final weight value, not the full vector of weights
-    # initialize W.p
-    W.p <- grow(Temperature, W, p, outpt,globalout_Prey, globalout_Prey_E)
-    
-    while((n.iter <= max.iter) & (abs(W.p-FW) > W.tol)) {
-      n.iter <- n.iter + 1
-      #W.p <- grow(Temperature, W, p, outpt,globalout_Prey, globalout_Prey_E)
-      if(W.p > FW) {p.max <- p} else {p.min <- p}
-      p <- (p.min + p.max)/2 #p.min + (p.max - p.min)/2
+    # outpt <- "final"
+    outpt <- "End"  # desire only ending weight or consumption value, not full vector; revised by JEB
+    withProgress(message = 'Calculating ...', min=0, max=max.iter, value = 0, {  # revised by JEB
+      # initialize W.p
       W.p <- grow(Temperature, W, p, outpt,globalout_Prey, globalout_Prey_E)
-      withProgress(message = 'Calculating ...',value = NULL,{
-      #Sys.sleep(0)
+    
+      while((n.iter <= max.iter) & (abs(W.p-FW) > W.tol)) {
+        n.iter <- n.iter + 1
+        incProgress(1, detail = paste("Doing iteration", n.iter))  # added by JEB
+        #W.p <- grow(Temperature, W, p, outpt,globalout_Prey, globalout_Prey_E)
+        if(W.p > FW) {p.max <- p} else {p.min <- p}
+        p <- (p.min + p.max)/2 #p.min + (p.max - p.min)/2
+        W.p <- grow(Temperature, W, p, outpt,globalout_Prey, globalout_Prey_E)
       }
-      )
-    }
+    })  # end of "withProgress" function; added by JEB
     return(p)
-  }
+  }  # end of fit.p function
    
-# fit.p = function(IW, FW, W.tol) {
-#   InTolerance = "FALSE"
-#   p0 = 0.25
-#   p1 = 0.50
-#   WEst0 = grow(Temperature, IW, p0, outpt="final",globalout_Prey, globalout_Prey_E)
-#   withProgress(message = 'Calculating ...',value = NULL,{
-#            }
-#   )
-#   WEst1 = grow(Temperature, IW, p1, outpt="final",globalout_Prey, globalout_Prey_E)
-#   withProgress(message = 'Calculating ...',value = NULL,{
-#            }
-#   )
-#   while(InTolerance == "FALSE") {
-#     if(WEst0 > FW) {  # Move grid, find new WEst
-#       p1 = p0
-#       WEst1 = WEst0
-#       p0 = max(p0 - 0.1, 0)
-#       WEst0 = grow(Temperature, IW, p0, outpt="final",globalout_Prey, globalout_Prey_E)
-#       withProgress(message = 'Calculating ...',value = NULL,{
-#               }
-#       )
-#     }
-#     if(WEst1 < FW) {  # Move grid, find new WEst
-#       p0 = p1
-#       WEst0 = WEst1
-#       p1 = min(p1 + 0.1, 1)
-#       WEst1 = grow(Temperature, IW, p1, outpt="final",globalout_Prey, globalout_Prey_E)
-#       withProgress(message = 'Calculating ...',value = NULL,{
-#                }
-#       )
-#     }
-#     if(WEst0 <= FW & WEst1 >= FW) {  # WEnd is in grid
-#       # Interpolate new p in this range
-#       pNew = p0 + (p1 - p0) * (FW - WEst0) / (WEst1 - WEst0)
-#       WNew = grow(Temperature, IW, pNew, outpt="final",globalout_Prey, globalout_Prey_E)
-#       withProgress(message = 'Calculating ...',value = NULL,{
-#               }
-#       )
-#       if(WNew < FW) {  # Narrow the grid
-#         p0 = pNew
-#         WEst0 = WNew
-#       }
-#       if(WNew > FW) {  # Narrow the grid
-#         p1 = pNew
-#         WEst1 = WNew
-#       }      
-#       if(abs(WNew - FW) < W.tol) {
-#         InTolerance = "True"
-#       }
-#     }
-#   }
-#   return(pNew)
-# }  
 ########################################################################
 ### Model run 
 ########################################################################
 
+time.Start <- proc.time() # start clock to time model run # added by JEB
+
+  
 if(fit.to=="Ration"){ 
   W1.p <- grow_ration(Temperature=Temperature,W=Init_W,outpt="vector",globalout_Prey=globalout_Prey, globalout_Prey_E=globalout_Prey_E)
   W1.p #<- cbind(W1.p,W2.p)
@@ -1194,10 +1190,13 @@ if(fit.to=="Ration"){
   FW <-ifelse(fit.to=="Weight",Final_W,eaten) 
   p <- 0.5  
   p <- fit.p(p,Init_W, FW, W.tol,max.iter) ###  fit.p(Init_W, FW, W.tol)
+  outpt <- "vector"
   W1.p <- grow(Temperature=Temperature,W=Init_W,p=p,outpt="vector",globalout_Prey=globalout_Prey, globalout_Prey_E=globalout_Prey_E)
   W1.p #<- cbind(W1.p,W2.p) 
   rownames(W1.p) <- NULL
 }
+
+time.Elapsed <- proc.time() - time.Start # elapsed time # added by JEB
 
 ########################################################################
 ### Outputs
@@ -1205,14 +1204,39 @@ if(fit.to=="Ration"){
 
   output$summary <- renderTable({ 
     Model()
-    parms <- read.csv("Parameters_official.csv") #  Read parameter values from .csv file
+    parms <- read.csv("Parameters_official.csv",stringsAsFactors = FALSE) #  Read parameter values from .csv file
     p <- ifelse(input$fitto=="Ration",NA,format(round(p,4), nsmall = 3))
     Growth <- format(round(W1.p[(input$FD-input$ID+1),4],3), nsmall = 3)
     Consom <- format(round(sum(W1.p[,"Specific.Consumption.Rate.Grams"]*W1.p[,"Starting.Weight"]),3), nsmall = 3)
-      
-    
-    Parameter <- c("p-value","Total consumption (g)","Final weight (g)")
-    Value <- c(p,Consom,Growth)
+    time.Run <- format(round(time.Elapsed[3],3), nsmall = 3) # 3rd value is total elapsed time JEB
+    # Check for energy balance; JEB
+    ED.start <- pred_En_D(W=Init_W,day=1,PREDEDEQ=PREDEDEQ) # initial predator energy density (J/g) on day 1
+    BodyE.start <- Init_W*ED.start # initial total body energy (J); JEB
+    W.final  <- W1.p[(input$FD-input$ID+1),4]   # final weight (g); JEB
+    ED.final <- W1.p[(input$FD-input$ID+1),16]  # final energy density (J/g); JEB
+    BodyE.final <- W.final*ED.final  # Final total body energy (J) = Final weight (g) * final ED (J/g)
+    TotEgain <- W1.p[(input$FD-input$ID+1),27]  # total energy gain (J);  JEB
+    TotSpawnE <- W1.p[(input$FD-input$ID+1),23]  # total energy lost in spawning (J);  JEB
+    # TotSpawnE is total energy lost at spawning; value from globalout; JEB
+    EStartGain <- BodyE.start + TotEgain - TotSpawnE  # Initial Body E + Egains - Elosses, all in Joules; JEB
+    ErelDiff <- abs(EStartGain - BodyE.final)/BodyE.final  # Relative absolute difference in E budget; JEB
+    Etol1 <- 0.000001  # Allowable relative error in energy budget; JEB
+    Emsg1 <- ifelse(ErelDiff < Etol1, "OK. Energy budget balanced.", "Warning! Energy budget not balanced!") # JEB
+    EB.OK <- ifelse(ErelDiff < Etol1, TRUE, FALSE) # JEB
+    E.relDiff.f <- format(round(ErelDiff,6), nsmall = 3)  # relative difference from E balance; JEB
+    # end of check for energy balance; JEB
+    if(EB.OK) {   # Energy budget balanced within tolerance; JEB
+      Emsg1 <- "OK. Energy budget balanced."  # JEB
+      Parameter <- c("p-value","Total consumption (g)","Final weight (g)","Run time (s)",Emsg1) # JEB
+      Value <- c(p, Consom, Growth, time.Run, E.relDiff.f) # added time.Run, E.relDiff, E.Diff.f;  JEB
+    } else {      # Energy budget not balanced within tolerance; JEB
+      Emsg1 <- "Warning! Energy budget not balanced!"  # JEB
+      E.Diff <- BodyE.start + TotEgain - TotSpawnE - BodyE.final  # Difference in E budget; JEB
+      E.Diff.f <- format(round(E.Diff,3), nsmall = 3)  # Difference from E balance (J); JEB
+      Emsg2 <- ifelse(E.Diff < 0, "Warning! Missing joules in energy budget!", "Warning! Extra joules in energy budget!") # JEB
+      Parameter <- c("p-value","Total consumption (g)","Final weight (g)","Run time (s)",Emsg1,Emsg2) # JEB
+      Value <- c(p, Consom, Growth, time.Run, E.relDiff.f, E.Diff.f) # added time.Run, E.relDiff, E.Diff.f;  JEB
+    }    
     as.data.frame(cbind(Parameter,Value))
   
   },include.rownames=FALSE)
@@ -1240,8 +1264,9 @@ output$plot <- renderPlot({
   
   W1.p <- Model()
   op <- par(mar = c(5,4,4,4) + 0.1)
-  plot( W1.p[,input$xaxis],W1.p[,input$yaxis],xlim=c(min(W1.p[,input$xaxis]),max(W1.p[,input$xaxis]))
-        ,ylim=c(min(W1.p[,input$yaxis]),max(W1.p[,input$yaxis])),xlab=input$xaxis,ylab=input$yaxis,type="l",col="red")
+  plot( W1.p[,input$xaxis],W1.p[,input$yaxis],xlim=c(min(W1.p[,input$xaxis]),max(W1.p[,input$xaxis])),
+        ylim=c(min(W1.p[,input$yaxis]),max(W1.p[,input$yaxis])),xlab=input$xaxis,ylab=input$yaxis,
+        cex.lab=1.5,type="l",col="red")  # added cex.lab=1.5 JEB
   par(new=TRUE)
   plot(W1.p[,input$xaxis], W1.p[,input$yaxis2],type="l",ylim=c(min(W1.p[,input$yaxis2]),max(W1.p[,input$yaxis2])),
        col="blue",xaxt="n",yaxt="n",xlab="",ylab="")
@@ -1268,7 +1293,7 @@ output$parameters <- renderTable({
 output$temp <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
   Last_day    <- input$FD             ### Last day of the simulation
-  Temperature <- read.csv("Main Inputs/Temperature.csv") #  Read daily Temp values from .csv file
+  Temperature <- read.csv("Main Inputs/Temperature.csv",stringsAsFactors = FALSE) #  Read daily Temp values from .csv file
   Day <- Temperature[,1] # Days
   Temperature <- Temperature[,2]  # Just use the Temp values, which are in column 2
   last_day <- tail(Day, n = 1)  # get the total number of days
@@ -1282,7 +1307,7 @@ output$temp <- renderPlot({
 output$diet_prop <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
   Last_day    <- input$FD             ### Last day of the simulation
-  Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE)
+  Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE,stringsAsFactors = FALSE)
   Day_prey <- Diet_prop[,1] # Days
   prey_items <- (ncol(Diet_prop))-1
   last_day_prey <- tail(Day_prey, n = 1)  # get the total number of days
@@ -1292,7 +1317,7 @@ output$diet_prop <- renderPlot({
     Prey <- approx(Day_prey,Prey, n = last_day_prey,method="linear")$y # interpolate prey 1 energy density
     Prey <- Prey[First_day:Last_day]
     globalout_Prey <- cbind(globalout_Prey,Prey)
-    Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE)
+    Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE,stringsAsFactors = FALSE)
   }
   colnames(globalout_Prey) <- names(Diet_prop)[-1]
   plot(First_day:Last_day,globalout_Prey[,1],type="l",col=2,xlim=c(min(First_day),max(Last_day)),
@@ -1308,7 +1333,7 @@ output$diet_prop <- renderPlot({
 output$prey_ED <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
   Last_day    <- input$FD             ### Last day of the simulation
-  Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE)
+  Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE,stringsAsFactors = FALSE)
   Day_Prey_E <- Prey_E[,1] # Days
   prey_items <- (ncol(Prey_E))-1
   last_day_prey_E <- tail(Day_Prey_E, n = 1)  # get the total number of days
@@ -1318,7 +1343,7 @@ output$prey_ED <- renderPlot({
     Prey_E <- approx(Day_Prey_E,Prey_E, n = last_day_prey_E,method="constant")$y # interpolate prey 1 energy density
     Prey_E <- Prey_E[First_day:Last_day]
     globalout_Prey_E <- cbind(globalout_Prey_E,Prey_E)
-    Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE)
+    Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE,stringsAsFactors = FALSE)
   }
   colnames(globalout_Prey_E) <- names(Prey_E)[-1]
   plot(First_day:Last_day,globalout_Prey_E[,1],type="l",col=2,xlim=c(min(First_day),max(Last_day)),
@@ -1334,7 +1359,7 @@ output$prey_ED <- renderPlot({
 output$indigest_prey <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation
-Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE)
+Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_ind_prey <- Ind_prey[,1] # Days
 Ind_prey_items <- (ncol(Ind_prey))-1
 last_day_ind_prey <- tail(Day_ind_prey, n = 1)  # get the total number of days
@@ -1344,7 +1369,7 @@ for(i in 1:Ind_prey_items){
   Prey <- approx(Day_ind_prey,Prey, n = last_day_ind_prey,method="linear")$y # interpolate prey 1 energy density
   Prey <- Prey[First_day:Last_day]
   globalout_Ind_Prey <- cbind(globalout_Ind_Prey,Prey)
-  Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE)
+  Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
 }
 colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
   plot(First_day:Last_day,globalout_Ind_Prey[,1],type="l",col=2,xlim=c(min(First_day),max(Last_day)),
@@ -1358,22 +1383,60 @@ colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
 })
 
 output$pred_ED <- renderPlot({
-First_day   <- input$ID             ### First day of the simulation
-Last_day    <- input$FD             ### Last day of the simulation  
-Predator_E <- read.csv("Main Inputs/Pred_E.csv",head=TRUE) 
-Day_pred <- Predator_E[,1] # Days
-Pred_E <- Predator_E[,2]  # Just use the predator energy values, which are in column 2
-last_day_pred <- tail(Day_pred, n = 1)  # get the total number of days + 1
-Dayz_pred <- approx(Day_pred,Pred_E, n = last_day_pred, method="linear")$x
-Dayz_pred <- Dayz_pred[First_day:Last_day]
-Pred_E <- approx(Day_pred,Pred_E, n = last_day_pred, method="linear")$y # interpolate temperature data
-plot(Dayz_pred,Pred_E[First_day:Last_day],type="l",xlab="Day",ylab="Energy Density (J/g)")
-})
+  # First, need to define the Predator Energy Density parameters for the chosen species
+  Sp <- input$spec  # Species chosen
+  PREDEDEQ <- parms[Sp,"PREDEDEQ"] ### equation used
+  PREDED   <- parms[Sp,"ED"]     ### predator energy density
+  alpha1   <- parms[Sp,"Alpha1"] ### intercept for the allometric mass function for first size range
+  beta1    <- parms[Sp,"Beta1"]  ### slope of the allometric mass function for first size range
+  cutoff   <- parms[Sp,"Cutoff"] ### end of first size range 
+  alpha2   <- parms[Sp,"Alpha2"] ### intercept for the allometric mass function for second size range
+  beta2    <- parms[Sp,"Beta2"]  ### slope of the allometric mass function for second size range
+  # Define the function used to calculate Predator Energy Density, 
+  #   because it is not available to be used for plotting, otherwise; JEB
+  # Alternatively, could this function (and others) be defined for use in the entire session?? JEB
+  pred_En_D <- function(W,day,PREDEDEQ) {  # function copied directly from earlier in the code; JEB
+    if(PREDEDEQ == 1) {return(Pred_E[day])   
+    } else if(PREDEDEQ == 3) {return(alpha1*W^beta1)  
+    } else if(PREDEDEQ == 2) {
+      if(W <as.numeric(cutoff)) {return((as.numeric(alpha1) + as.numeric(beta1)*W))}
+      if(W>=as.numeric(cutoff)) {return((as.numeric(alpha2) + as.numeric(beta2)*W))} 
+      if(W <as.numeric(cutoff) && as.numeric(beta1) == 0) {return((as.numeric(alpha1)))}  
+      if(W>=as.numeric(cutoff) && as.numeric(beta2) == 0) {return((as.numeric(alpha2)))}
+    }  # restructured to minimize if-tests; JEB
+  }
+  
+  if(PREDEDEQ == 1) {  # Use Predator Energy Density values specified in the csv table; JEB
+    First_day   <- input$ID             ### First day of the simulation
+    Last_day    <- input$FD             ### Last day of the simulation  
+    Predator_E <- read.csv("Main Inputs/Pred_E.csv",head=TRUE,stringsAsFactors = FALSE) 
+    Day_pred <- Predator_E[,1] # Days
+    Pred_E <- Predator_E[,2]  # Just use the predator energy values, which are in column 2
+    last_day_pred <- tail(Day_pred, n = 1)  # get the total number of days + 1
+    Dayz_pred <- approx(Day_pred,Pred_E, n = last_day_pred, method="linear")$x
+    Dayz_pred <- Dayz_pred[First_day:Last_day]
+    Pred_E <- approx(Day_pred,Pred_E, n = last_day_pred, method="linear")$y # interpolate temperature data
+    plot(Dayz_pred,Pred_E[First_day:Last_day],type="l",xlab="Day",ylab="Energy Density (J/g)")
+  }else if(PREDEDEQ == 2) {
+    X.f = exp(log(1000)/15)  # Find the X.f value which = 1000 when raised to the 15th power
+    X.W <- X.f^(0:15)        # range of weights at even increments along a log(x) axis.
+    Y.ED = rep(1, 16)        # create a vector of 16 numbers.
+    for(j in 0:15) {
+      Y.ED[j+1] = pred_En_D(X.W[j+1], 1, PREDEDEQ)  # compute corresponding Energy Density (J/g)
+    }
+    plot(X.W, Y.ED, type="l",xlab="Weight (g)",ylab="Energy Density (J/g)", xlog=TRUE, lwd=1.5)
+  }else if(PREDEDEQ == 3) {
+    X.f = exp(log(1000)/15)  # Find the X.f value which = 1000 when raised to the 15th power
+    X.W <- X.f^(0:15)        # range of weights at even increments along a log(x) axis.
+    Y.ED <- alpha1*X.W^beta1 # corresponding values of Energy Density
+    plot(X.W, Y.ED, type="l",xlab="Weight (g)",ylab="Energy Density (J/g)", xlog=TRUE, lwd=1.5)
+  }
+})  # end of plot of Predator Energy Density
 
 output$mort <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation    
-Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE)
+Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_mort <- Mortality[,1] # Days
 mort_types <- (ncol(Mortality))-1
 last_day_mort <- tail(Day_mort, n = 1)  # get the total number of days
@@ -1383,9 +1446,7 @@ for(i in 1:mort_types){
   Mort <- approx(Day_mort,Mort, n = last_day_mort,method="constant")$y # interpolate prey 1 energy density
   Mort <- Mort[First_day:Last_day]
   globalout_mort <- cbind(globalout_mort,Mort)
-  #     colnames(globalout_mort[,i]) 
-  #     colnames(globalout_mort[,i]) <- names(Mortality[i+1])
-  Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE)
+  Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE,stringsAsFactors = FALSE)
 }
 colnames(globalout_mort) <- names(Mortality)[-1]
 globalout_mort_prob <- NULL
@@ -1410,18 +1471,18 @@ globalout_mort <- cbind(First_day:Last_day,globalout_mort,globalout_mort_prob)
 output$pop <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation      
-Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE)
+Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_mort <- Mortality[,1] # Days
 mort_types <- (ncol(Mortality))-1
 last_day_mort <- tail(Day_mort, n = 1)  # get the total number of days
 globalout_mort <- NULL
 
-for(i in 1:mort_types){
-  Mort <- Mortality[,i+1]
+for(j in 1:mort_types){
+  Mort <- Mortality[,j+1]
   Mort <- approx(Day_mort,Mort, n = last_day_mort,method="constant")$y # interpolate mortality
   Mort <- Mort[First_day:Last_day]
   globalout_mort <- cbind(globalout_mort,Mort)
-  Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE)
+  Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_mort) <- names(Mortality)[-1]
@@ -1431,28 +1492,29 @@ globalout_mort$Fish_Mort_Int <- NA
 
 days <- nrow(globalout_mort)
 intervals <- 1
-previous_nat_int <- 1
-previous_nat_int_dur <- 0
-previous_fish_int <- 1
-previous_fish_int_dur <- 0
+nat_int_start <- 1
+nat_int_dur <- 0
+fish_int_start <- 1
+fish_int_dur <- 0
+
 for(i in 1:(days-1)){
-  globalout_mort$Nat_Mort_Int[i] <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],i,globalout_mort$Nat_Mort_Int[i])
-  globalout_mort$Nat_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-previous_nat_int,NA)
-  globalout_mort$Nat_Mort_Int[previous_nat_int:i] <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],i-previous_nat_int_dur,globalout_mort$Nat_Mort_Int[previous_nat_int:i])
-  globalout_mort$Nat_Mort_Int[previous_nat_int:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-previous_nat_int+1,globalout_mort$Nat_Mort_Int[previous_nat_int:i])
-  previous_nat_int_dur <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],length(globalout_mort$Nat_Mort_Int[previous_nat_int:i]),previous_nat_int_dur)
-  previous_nat_int <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],i+1,previous_nat_int)
+  nat_int_dur <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],nat_int_dur+1,nat_int_dur+1)
+  globalout_mort$Nat_Mort_Int[nat_int_start:i] <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],rep(nat_int_dur,nat_int_dur),NA)
+  globalout_mort$Nat_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-nat_int_start,NA)
+  globalout_mort$Nat_Mort_Int[nat_int_start:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-nat_int_start+1,globalout_mort$Nat_Mort_Int[nat_int_start:i])
+  nat_int_dur <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],0,nat_int_dur)
+  nat_int_start <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],i+1,nat_int_start)
   
-  globalout_mort$Fish_Mort_Int[i] <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i,globalout_mort$Fish_Mort_Int[i])
-  globalout_mort$Fish_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-previous_fish_int,NA)
-  globalout_mort$Fish_Mort_Int[previous_fish_int:i] <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i-previous_fish_int_dur,globalout_mort$Fish_Mort_Int[previous_fish_int:i])
-  globalout_mort$Fish_Mort_Int[previous_fish_int:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-previous_fish_int+1,globalout_mort$Fish_Mort_Int[previous_fish_int:i])
-  previous_fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],length(globalout_mort$Fish_Mort_Int[previous_fish_int:i]),previous_fish_int_dur)
-  previous_fish_int <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i+1,previous_fish_int)
+  fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],fish_int_dur+1,fish_int_dur+1)
+  globalout_mort$Fish_Mort_Int[fish_int_start:i] <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],rep(fish_int_dur,fish_int_dur),NA)
+  globalout_mort$Fish_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-fish_int_start,NA)
+  globalout_mort$Fish_Mort_Int[fish_int_start:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-fish_int_start+1,globalout_mort$Fish_Mort_Int[fish_int_start:i])
+  fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],0,fish_int_dur)
+  fish_int_start <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i+1,fish_int_start)
   
 }
 
-Individuals <- input$ind
+Individuals <- Ind
 globalout_individuals <- NULL
 
 for(i in 1:(Last_day-First_day+1)){  
@@ -1471,7 +1533,7 @@ plot(globalout_individuals[,1],globalout_individuals[,2],type="l",xlab="Day",yla
 })
 
 output$repro <- renderPlot({
-  Reproduction <- read.csv("Sub-Models/Reproduction/Reproduction.csv",head=TRUE)
+  Reproduction <- read.csv("Sub-Models/Reproduction/Reproduction.csv",head=TRUE,stringsAsFactors = FALSE)
   First_day   <- input$ID             ### First day of the simulation
   Last_day    <- input$FD             ### Last day of the simulation   
   Day <- Reproduction[,1] # Days
@@ -1487,7 +1549,7 @@ output$repro <- renderPlot({
 output$cont_ae <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation     
-Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE)
+Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Prey_ass <- Prey_ass[,1] # Days
 prey_items <- (ncol(Prey_ass))-1
 last_day_prey_ass <- tail(Day_Prey_ass, n = 1)  # get the total number of days
@@ -1498,7 +1560,7 @@ for(i in 1:prey_items){
   Prey_ass <- approx(Day_Prey_ass,Prey_ass, n = last_day_prey_ass,method="constant")$y # interpolate prey 1 energy density
   Prey_ass <- Prey_ass[First_day:Last_day]
   globalout_Prey_ass <- cbind(globalout_Prey_ass,Prey_ass)
-  Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE)
+  Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Prey_ass) <- names(Prey_ass)[-1]
@@ -1517,7 +1579,7 @@ legend("topleft",col=2:(prey_items+1),lty=1,legend=colnames(globalout_Prey_ass),
 output$prey_cont_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation       
-Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE)
+Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_conc <- Prey_conc[,1] # Days
 prey_items <- (ncol(Prey_conc))-1
 last_day_conc <- tail(Day_conc, n = 1)  # get the total number of days
@@ -1529,7 +1591,7 @@ for(i in 1:prey_items){
   Prey_Conc <- approx(Day_conc,Prey_Conc, n = last_day_conc,method="linear")$y # interpolate prey 1 energy density
   Prey_Conc <- Prey_Conc[First_day:Last_day]
   globalout_Prey_Conc <- cbind(globalout_Prey_Conc,Prey_Conc)
-  Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE)
+  Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Prey_Conc) <- names(Prey_conc)[-1]
@@ -1547,7 +1609,7 @@ colnames(globalout_Prey_Conc) <- names(Prey_conc)[-1]
 output$trans_eff <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
   Last_day    <- input$FD             ### Last day of the simulation      
-  Trans_eff <- read.csv("Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv",head=TRUE)
+  Trans_eff <- read.csv("Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv",head=TRUE,stringsAsFactors = FALSE)
   Day_Trans_eff <- Trans_eff[,1] # Days
   prey_items <- (ncol(Trans_eff))-1
   last_day_trans_eff <- tail(Day_Trans_eff, n=1)
@@ -1559,7 +1621,7 @@ output$trans_eff <- renderPlot({
     Trans_eff <- approx(Day_Trans_eff,Trans_eff, n = last_day_trans_eff,method="constant")$y # interpolate prey 1 energy density
     Trans_eff <- Trans_eff[First_day:Last_day]
     globalout_Trans_eff <- cbind(globalout_Trans_eff,Trans_eff)
-    Trans_eff <- read.csv("Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv",head=TRUE)
+    Trans_eff <- read.csv("Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv",head=TRUE,stringsAsFactors = FALSE)
   }
   colnames(globalout_Trans_eff) <- names(Trans_eff)[-1]
   
@@ -1576,7 +1638,7 @@ output$trans_eff <- renderPlot({
 output$phos_ae <- renderPlot({ 
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation     
-Phos_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Ae.csv",head=TRUE)
+Phos_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Ae <- Phos_Ae[,1] # Days
 prey_items_nut <- (ncol(Phos_Ae))-1
 last_day_Phos_Ae <- tail(Day_Phos_Ae, n = 1)  # get the total number of days
@@ -1587,7 +1649,7 @@ for(i in 1:prey_items_nut){
   Phos_Ae <- approx(Day_Phos_Ae,Phos_Ae, n = last_day_Phos_Ae,method="linear")$y # interpolate prey 1 energy density
   Phos_Ae <- Phos_Ae[First_day:Last_day]
   globalout_Phos_Ae <- cbind(globalout_Phos_Ae,Phos_Ae)
-  Phos_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Ae.csv",head=TRUE)
+  Phos_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Phos_Ae) <- names(Phos_Ae)[-1]
@@ -1605,7 +1667,7 @@ colnames(globalout_Phos_Ae) <- names(Phos_Ae)[-1]
 output$pred_phos_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation       
-Phos_Conc_Pred <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Pred.csv",head=TRUE)
+Phos_Conc_Pred <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Pred.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Conc_Pred <- Phos_Conc_Pred[,1] # Days
 last_day_Phos_Conc_Pred <- tail(Day_Phos_Conc_Pred, n = 1)  # get the total number of days
 globalout_Phos_Conc_Pred <- NULL
@@ -1622,7 +1684,7 @@ colnames(globalout_Phos_Conc_Pred) <- names(Phos_Conc_Pred)[-1]
 output$prey_phos_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation       
-Phos_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv",head=TRUE)
+Phos_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Conc_Prey <- Phos_Conc_Prey[,1] # Days
 prey_items_nut <- (ncol(Phos_Conc_Prey))-1
 last_day_Phos_Conc_Prey <- tail(Day_Phos_Conc_Prey, n = 1)  # get the total number of days
@@ -1633,7 +1695,7 @@ for(i in 1:prey_items_nut){
   Phos_Conc_Prey <- approx(Day_Phos_Conc_Prey,Phos_Conc_Prey, n = last_day_Phos_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
   Phos_Conc_Prey <- Phos_Conc_Prey[First_day:Last_day]
   globalout_Phos_Conc_Prey <- cbind(globalout_Phos_Conc_Prey,Phos_Conc_Prey)
-  Phos_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv",head=TRUE)
+  Phos_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Phos_Conc_Prey) <- names(Phos_Conc_Prey)[-1]
@@ -1651,7 +1713,7 @@ colnames(globalout_Phos_Conc_Prey) <- names(Phos_Conc_Prey)[-1]
 output$nit_ae <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation     
-Nit_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Ae.csv",head=TRUE)
+Nit_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Ae <- Nit_Ae[,1] # Days
 prey_items_nut <- (ncol(Nit_Ae))-1
 last_day_Nit_Ae <- tail(Day_Nit_Ae, n = 1)  # get the total number of days
@@ -1662,7 +1724,7 @@ for(i in 1:prey_items_nut){
   Nit_Ae <- approx(Day_Nit_Ae,Nit_Ae, n = last_day_Nit_Ae,method="linear")$y # interpolate prey 1 energy density
   Nit_Ae <- Nit_Ae[First_day:Last_day]
   globalout_Nit_Ae <- cbind(globalout_Nit_Ae,Nit_Ae)
-  Nit_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Ae.csv",head=TRUE)
+  Nit_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Nit_Ae) <- names(Nit_Ae)[-1]
@@ -1680,7 +1742,7 @@ colnames(globalout_Nit_Ae) <- names(Nit_Ae)[-1]
 output$pred_nit_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation    
-Nit_Conc_Pred <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Pred.csv",head=TRUE)
+Nit_Conc_Pred <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Pred.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Conc_Pred <- Nit_Conc_Pred[,1] # Days
 last_day_Nit_Conc_Pred <- tail(Day_Nit_Conc_Pred, n = 1)  # get the total number of days
 globalout_Nit_Conc_Pred <- NULL
@@ -1697,7 +1759,7 @@ colnames(globalout_Nit_Conc_Pred) <- names(Nit_Conc_Pred)[-1]
 output$prey_nit_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation      
-Nit_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv",head=TRUE)
+Nit_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Conc_Prey <- Nit_Conc_Prey[,1] # Days
 prey_items_nut <- (ncol(Nit_Conc_Prey))-1
 last_day_Nit_Conc_Prey <- tail(Day_Nit_Conc_Prey, n = 1)  # get the total number of days
@@ -1708,7 +1770,7 @@ for(i in 1:prey_items_nut){
   Nit_Conc_Prey <- approx(Day_Nit_Conc_Prey,Nit_Conc_Prey, n = last_day_Nit_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
   Nit_Conc_Prey <- Nit_Conc_Prey[First_day:Last_day]
   globalout_Nit_Conc_Prey <- cbind(globalout_Nit_Conc_Prey,Nit_Conc_Prey)
-  Nit_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv",head=TRUE)
+  Nit_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Nit_Conc_Prey) <- names(Nit_Conc_Prey)[-1]
@@ -1722,11 +1784,8 @@ colnames(globalout_Nit_Conc_Prey) <- names(Nit_Conc_Prey)[-1]
   }
   legend("topleft",col=2:(prey_items_nut+1),lty=1,legend=colnames(globalout_Nit_Conc_Prey), bty = "n")
 })
-
-#withProgress(message = "Computing Data", value = 1, {
-   #Sys.sleep(0.25)
 })
 
-#})
+
 
 
