@@ -307,7 +307,7 @@ shinyServer(function(input, output,session) {
     Prey <- Diet_prop[,i+1]
     Prey <- approx(Day_prey,Prey, n = last_day_prey,method="linear")$y # interpolate prey 1 energy density
     Prey <- Prey[First_day:Last_day]
-    globalout_Prey <- cbind(globalout_Prey,Prey)
+    globalout_Prey <- cbind(globalout_Prey,Prey)  # Proportion of each prey type in the diet
     Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE,stringsAsFactors = FALSE)
     Prey_E <- Prey_E[,i+1]  
     Prey_E <- approx(Day_Prey_E,Prey_E, n = last_day_prey_E,method="constant")$y # interpolate prey 1 energy density
@@ -676,26 +676,41 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     
     Pred_E_i <- pred_En_D(W=W,day=i,PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
     Pred_E_iplusone <- pred_En_D(W=W,day=(i+1),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
-    Cons.ipW <- consumption(Temperature=Temperature[i],p=p, W=W, CEQ=CEQ)  # added by JEB
-    # Cons <- consumption(Temperature=Temperature[i],p=p, W=W, CEQ=CEQ)* # Consumption in J/g
-    Cons <- Cons.ipW* # Consumption in J/g  # added by JEB
-      sum(globalout_Prey[i,]*globalout_Prey_E[i,])
+    Prey_ED_i <- globalout_Prey[i,]*globalout_Prey_E[i,] # vector of Prey energy densities (J/g) on day i
+    mean_prey_ED <- sum(Prey_ED_i) # weighted mean prey energy density (J/g) on day i; JEB
+    # Calculate consumption differently if specifying "Ration" or "Ration_prey":
+    if(fit.to == "Ration") {
+      # Calculate Consumption based on Ration, then use that to find the corresponding p-value for this day
+      Cons.gg <- Ration  # units (g prey/g fish) per day
+      Cons <- Ration*mean_prey_ED  # (J/g); Ration has units of (g prey)/(g fish); mean_prey_ED has units (J/g prey)
+      Cons_p1 <- consumption(Temperature=Temperature[i], W=W, p=1, CEQ=CEQ)*mean_prey_ED # Consumption in (J/g)
+      p <- Cons/Cons_p1  # Calculated daily p-value for this Ration
+    } else if(fit.to == "Ration_prey") {
+      # Calculate Consumption based on Ration_prey, then use that to find the corresponding p-value for this day
+      Cons.gg <- Ration_prey/W  # units (g food/g fish), where Ration_prey is (g food) per day.
+      Cons <- (Ration_prey/W)*mean_prey_ED  # (J/g) = ((g prey)/(g fish))*(J/g prey)
+      Cons_p1 <- consumption(Temperature=Temperature[i], W=W, p=1, CEQ=CEQ)*mean_prey_ED # Consumption in (J/g)
+      p <- Cons/Cons_p1  # Calculated daily p-value for this Ration_prey
+    } else { 
+      # Now, with p-value determined or specified, calculate Cons for this day
+      #Cons.gg is the consumption (g prey/g fish), using T on day i, p-value, Weight, and the specified Consumption Equation number.
+      Cons.gg <- consumption(Temperature=Temperature[i], p=p, W=W, CEQ=CEQ)  # (g prey/g fish); only call once with these params; JEB
+      # Cons <- consumption(Temperature=Temperature[i],p=p, W=W, CEQ=CEQ)*mean_prey_ED # Consumption in (J/g)
+      Cons <- Cons.gg*mean_prey_ED # Cons = Consumption in (J/g) ; units: (J/g) = (g prey/g fish)*(J/g prey)  # JEB
+    }
+    # record daily values only if needed.
     if(outpt != "End") {  # Daily values not needed if only fitting final weight or cons
       # Cons_prey_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in J
-      Cons_prey_J <- data.frame(t(Cons.ipW* # Consumption by prey in J  # added by JEB
-                                    (globalout_Prey[i,]*globalout_Prey_E[i,])*W))
+      Cons_prey_J <- data.frame(t(Cons.gg*Prey_ED_i*W)) # Consumption by prey type in J  # added by JEB
       colnames(Cons_prey_J) <- paste(colnames(Cons_prey_J),"Joules", sep = " ")
       # Cons_prey_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in g
-      Cons_prey_G <- data.frame(t(Cons.ipW* # Consumption by prey in g  # added by JEB
-                                    (globalout_Prey[i,]*W)))
+      Cons_prey_G <- data.frame(t(Cons.gg*(globalout_Prey[i,]*W))) # Consumption by prey type in g  # added by JEB
       colnames(Cons_prey_G) <- paste(colnames(Cons_prey_G),"Grams", sep = " ")
       # Cons_prey_pop_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in J
-      Cons_prey_pop_J <- data.frame(t(Cons.ipW* # Population consumption by prey in J  # added by JEB
-                                        (globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind))
+      Cons_prey_pop_J <- data.frame(t(Cons.gg*Prey_ED_i*W*Ind)) # Population consumption by prey in J  # added by JEB
       colnames(Cons_prey_pop_J) <- paste(colnames(Cons_prey_pop_J),"pop.Joules", sep = " ")
       # Cons_prey_pop_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in g
-      Cons_prey_pop_G <- data.frame(t(Cons.ipW* # Population consumption by prey in g  # added by JEB
-                                        (globalout_Prey[i,]*W*Ind)))
+      Cons_prey_pop_G <- data.frame(t(Cons.gg*(globalout_Prey[i,]*W*Ind))) # Population consumption by prey in g  # added by JEB
       colnames(Cons_prey_pop_G) <- paste(colnames(Cons_prey_pop_G),"pop.Grams", sep = " ")
     }
     Eg  <- egestion(C=Cons,Temperature=Temperature[i],p=p, EGEQ=EGEQ) # Egestion in J/g
@@ -738,9 +753,10 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     weightgain  <-  finalwt-W  	#change in g/day
     
 
-    #Cons_cont <- consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)*globalout_Prey[i,]*W
-    Cons_cont <- Cons.ipW*globalout_Prey[i,]*W  # avoid call to Consumption(); JEB
-    
+    #Cons_cont: vector of (g prey consumed), by prey type; 
+    #  Note: Cons.gg is now computed (above) for all values of "fit.to"; JEB
+    Cons_cont <- (Cons.gg*W)*globalout_Prey[i,]  # vector of (g prey), by prey type; use Cons.gg to avoid call to Consumption(); JEB
+
     if(calc.nut==TRUE){
       Phos <- phosphorous_allocation(C=Cons_cont,p_conc_prey=globalout_Phos_Conc_Prey[i,],AEp=globalout_Phos_Ae[i,],weightgain=weightgain,p_conc_pred=globalout_Phos_Conc_Pred[i,])
       Nit <- nitrogen_allocation(C=Cons_cont,n_conc_prey=globalout_Nit_Conc_Prey[i,],AEn=globalout_Nit_Ae[i,],weightgain=weightgain,n_conc_pred=globalout_Nit_Conc_Pred[i,])
@@ -755,8 +771,10 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     } else {
       Cont <- NA
     }
+    ConsW <- Cons*W  # units (J) = (J/g)*(g); save a repeated multiplication
     
     if(outpt != "End") {  # Daily values not needed if only fitting final weight or cons
+      ConsWInd <- ConsW*Ind  # save a repeated multiplication
       globalout[i,"Day"] <- Day_Temp[i]
       globalout[i,"Temperature"]<-Temperature[i]
       globalout[i,"Starting.Weight"]<-W
@@ -765,34 +783,34 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
       globalout[i,"Population.Number"]<-Ind2
       globalout[i,"Population.Biomass"]<-finalwt*Ind
       globalout[i,"Specific.Growth.Rate.Joules"]<-G
-      globalout[i,"Specific.Consumption.Rate.Joules"]<-Cons
+      globalout[i,"Specific.Consumption.Rate.Joules"]<-Cons  # (J/g)
       globalout[i,"Specific.Egestion.Rate"]<-Eg
       globalout[i,"Specific.Excretion.Rate"]<-Ex
       globalout[i,"Specific.Respiration.Rate"]<-Res
       globalout[i,"Specific.SDA.Rate"]<-SpecDA
-      globalout[i,"Specific.Consumption.Rate.Grams"]<-Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])
-      globalout[i,"Specific.Growth.Rate.Grams"]<-G/sum(globalout_Prey[i,]*globalout_Prey_E[i,])
+      globalout[i,"Specific.Consumption.Rate.Grams"]<-Cons/mean_prey_ED # (g/g)
+      globalout[i,"Specific.Growth.Rate.Grams"]<-G/mean_prey_ED
       globalout[i,"Initial.Predator.Energy.Density"]<-Pred_E_i
       globalout[i,"Final.Predator.Energy.Density"]<-Pred_E_iplusone
-      globalout[i,"Mean.Prey.Energy.Density"]<-sum(globalout_Prey[i,]*globalout_Prey_E[i,])
+      globalout[i,"Mean.Prey.Energy.Density"]<-mean_prey_ED  # (J/g)
       globalout[i,"Gross.Production.Grams"]<-(Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i
       globalout[i,"Gross.Production.Joules"]<-(Cons +Res + Eg + Ex + SpecDA)*W
       globalout[i,"Cum.Gross.Production.Grams"]<-cumsum((Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i)
       globalout[i,"Cum.Gross.Production.Joules"]<-cumsum((Cons +Res + Eg + Ex + SpecDA)*W)
-      globalout[i,"Gametic.Production.Grams"]<-spawn*W  # JEB; was spawn*finalwt
-      globalout[i,"Cum.Gametic.Production.Joules"]<-TotSpawnE # Cumulative energy for spawning; JEB
+      globalout[i,"Gametic.Production.Grams"]<-spawn*W  # (g); JEB; was spawn*finalwt
+      globalout[i,"Cum.Gametic.Production.Joules"]<-TotSpawnE # (J); Cumulative energy (J) for spawning; JEB
       globalout[i,"Net.Production.Grams"]<-weightgain  # includes spawning losses; JEB
       globalout[i,"Net.Production.Joules"]<-egain  # not including spawning; JEB
       globalout[i,"Cum.Net.Production.Grams"]<-cumsum(weightgain)
       globalout[i,"Cum.Net.Production.Joules"]<-cumsum(egain)
-      globalout[i,"Prey.Tot.Ind.Grams"]<-Cons*W/sum(globalout_Prey[i,]*globalout_Prey_E[i,])
-      globalout[i,"Prey.Tot.Ind.Joules"]<-Cons*W
-      globalout[i,"Cum.Prey.Tot.Ind.Grams"]<-cumsum(Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W)
-      globalout[i,"Cum.Prey.Tot.Ind.Joules"]<-cumsum(Cons*W)
-      globalout[i,"Prey.Tot.Pop.Grams"]<-Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind
-      globalout[i,"Prey.Tot.Pop.Joules"]<-Cons*W*Ind
-      globalout[i,"Cum.Prey.Tot.Pop.Grams"]<-cumsum(Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind)
-      globalout[i,"Cum.Prey.Tot.Pop.Joules"]<-cumsum(Cons*W*Ind)
+      globalout[i,"Prey.Tot.Ind.Grams"]<-ConsW/mean_prey_ED
+      globalout[i,"Prey.Tot.Ind.Joules"]<-ConsW
+      globalout[i,"Cum.Prey.Tot.Ind.Grams"]<-cumsum(ConsW/mean_prey_ED)
+      globalout[i,"Cum.Prey.Tot.Ind.Joules"]<-cumsum(ConsW)
+      globalout[i,"Prey.Tot.Pop.Grams"]<-ConsWInd/mean_prey_ED
+      globalout[i,"Prey.Tot.Pop.Joules"]<-ConsWInd
+      globalout[i,"Cum.Prey.Tot.Pop.Grams"]<-cumsum(ConsWInd/mean_prey_ED)
+      globalout[i,"Cum.Prey.Tot.Pop.Joules"]<-cumsum(ConsWInd)
       globalout[i,"Mortality.number"]<-Ind-Ind2
       globalout[i,"Mortality.Grams"]<-(Ind-Ind2)*W
       globalout[i,"Nitrogen.Egestion"]<-Nit[4]
@@ -812,12 +830,12 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
       globalout[i,"Contaminant.Burden"]<-Cont[3]
       globalout[i,"Contaminant.Predator.Concentration"]<-Cont[4]
       globalout[i,paste(colnames(globalout_Prey),"Joules", sep = " ")]<-Cons_prey_J
-      globalout[i,paste(colnames(globalout_Prey),"Grams", sep = " ")]<-Cons_prey_G
+      globalout[i,paste(colnames(globalout_Prey),"Grams", sep = " ")] <-Cons_prey_G
       globalout[i,paste(colnames(globalout_Prey),"pop.Joules", sep = " ")]<-Cons_prey_pop_J
-      globalout[i,paste(colnames(globalout_Prey),"pop.Grams", sep = " ")]<-Cons_prey_pop_G
+      globalout[i,paste(colnames(globalout_Prey),"pop.Grams", sep = " ")] <-Cons_prey_pop_G
     }
     #globalout<-cbind(globalout,Cons_prey)
-    TotConsG  <- TotConsG + W*Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])  # Tot g cons; JEB
+    TotConsG  <- TotConsG + ConsW/mean_prey_ED  # Tot g cons; JEB
     # TotSpawnE is total energy lost at spawning; value now calculated earlier and passed in globalout; JEB
     #W <- finalwt-(spawn*finalwt) # spawning loss is accounted for earlier
     W <- finalwt  # Weight at the end of the day serves as the starting weight for the next day
@@ -842,6 +860,8 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
 ### Growth Function using ration
 ########################################################################
 
+# These calculations have now been consolidated in function grow(); JEB
+# This function grow_ration() is no longer needed; JEB
 grow_ration <- function(Temperature, W, outpt, globalout_Prey, globalout_Prey_E) { # Growth as a function of temperature, weight, p-value, prey proportion and energy density and predator energy density
   globalout <- NULL # Create a blank dataframe to store outputs
   for(i in 1:Fin) { # Create a loop that estimates growth for the duration of the simulation (Fin)
@@ -853,21 +873,23 @@ grow_ration <- function(Temperature, W, outpt, globalout_Prey, globalout_Prey_E)
     }
     Pred_E_i <- pred_En_D(W=W,day=i,PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
     Pred_E_iplusone <- pred_En_D(W=W,day=(i+1),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
+    # start of special code needed for grow_ration:
     Cons <- Ration*sum(globalout_Prey[i,]*globalout_Prey_E[i,])
     Cons_p <- consumption(Temperature=Temperature[i], W=W, p=1, CEQ=CEQ)* # Consumption in J/g
-    sum(globalout_Prey[i,]*globalout_Prey_E[i,])
+      sum(globalout_Prey[i,]*globalout_Prey_E[i,])
     p <- Cons/Cons_p
-    Cons_prey_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in J
+    # end of special code needed for grow_ration.
+    Cons_prey_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in (J)
                                   (globalout_Prey[i,]*globalout_Prey_E[i,])*W))
     colnames(Cons_prey_J) <- paste(colnames(Cons_prey_J),"Joules", sep = " ")
-    Cons_prey_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in g
+    Cons_prey_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in (g)
                                   (globalout_Prey[i,]*W)))
     colnames(Cons_prey_G) <- paste(colnames(Cons_prey_G),"Grams", sep = " ")
     Cons_prey_pop_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in J
-                                      (globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind))
+                                  (globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind))
     colnames(Cons_prey_pop_J) <- paste(colnames(Cons_prey_pop_J),"pop.Joules", sep = " ")
     Cons_prey_pop_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in g
-                                      (globalout_Prey[i,]*W*Ind)))
+                                  (globalout_Prey[i,]*W*Ind)))
     colnames(Cons_prey_pop_G) <- paste(colnames(Cons_prey_pop_G),"pop.Grams", sep = " ")
     Eg  <- egestion(C=Cons,Temperature=Temperature[i], p=p, EGEQ=EGEQ) # Egestion in J/g
     Ex  <- excretion(C=Cons, Eg=Eg,Temperature=Temperature[i], p=p, EXEQ=EXEQ) # Excretion in J/g
@@ -903,7 +925,7 @@ grow_ration <- function(Temperature, W, outpt, globalout_Prey, globalout_Prey_E)
       spawn <- 0
     }
     
-    Cons_cont <- Ration*globalout_Prey[i,]
+    Cons_cont <- Ration*globalout_Prey[i,]  # special code needed for grow_ration
     
     if(calc.nut==TRUE){
       Phos <- phosphorous_allocation(C=Cons_cont,p_conc_prey=globalout_Phos_Conc_Prey[i,],AEp=globalout_Phos_Ae[i,],weightgain=weightgain,p_conc_pred=globalout_Phos_Conc_Pred[i,])
@@ -982,15 +1004,17 @@ grow_ration <- function(Temperature, W, outpt, globalout_Prey, globalout_Prey_E)
   globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")] <- 
     cumsum( globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")])
   if(outpt == "vector") {return(globalout)} 
-  if(outpt == "final" && fit.to=="Weight")  {return(globalout[Fin,4])} 
-  if(outpt == "final" && fit.to=="Consumption")  {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
-  if(outpt == "final" && fit.to=="p-value")  {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
+  if(outpt == "final" && fit.to=="Weight")     {return(globalout[Fin,4])} 
+  if(outpt == "final" && fit.to=="Consumption"){return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
+  if(outpt == "final" && fit.to=="p-value")    {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
 }  # end of function grow_ration()
 
 ########################################################################
 ### Growth Function using fixed ration
 ########################################################################
 
+# These calculations have now been consolidated in function grow(); JEB
+# This function grow_ration_prey() is no longer needed; JEB
 grow_ration_prey <- function(Temperature, W, outpt, globalout_Prey, globalout_Prey_E) { # Growth as a function of temperature, weight, p-value, prey proportion and energy density and predator energy density
   globalout <- NULL # Create a blank dataframe to store outputs
   for(i in 1:Fin) { # Create a loop that estimates growth for the duration of the simulation (Fin)
@@ -1002,10 +1026,12 @@ grow_ration_prey <- function(Temperature, W, outpt, globalout_Prey, globalout_Pr
     }
     Pred_E_i <- pred_En_D(W=W,day=i,PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
     Pred_E_iplusone <- pred_En_D(W=W,day=(i+1),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
+    # start of special code for grow_ration_prey():
     Cons <- Ration_prey*sum(globalout_Prey[i,]*globalout_Prey_E[i,])/W
     Cons_p <- consumption(Temperature=Temperature[i], W=W, p=1, CEQ=CEQ)* # Consumption in J/g
       sum(globalout_Prey[i,]*globalout_Prey_E[i,])
     p <- Cons/Cons_p
+    # end of special code for grow_ration_prey().
     Cons_prey_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in J
                                   (globalout_Prey[i,]*globalout_Prey_E[i,])*W))
     colnames(Cons_prey_J) <- paste(colnames(Cons_prey_J),"Joules", sep = " ")
@@ -1132,9 +1158,9 @@ grow_ration_prey <- function(Temperature, W, outpt, globalout_Prey, globalout_Pr
   globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")] <- 
     cumsum( globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")])
   if(outpt == "vector") {return(globalout)} 
-  if(outpt == "final" && fit.to=="Weight")  {return(globalout[Fin,4])} 
-  if(outpt == "final" && fit.to=="Consumption")  {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
-  if(outpt == "final" && fit.to=="p-value")  {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
+  if(outpt == "final" && fit.to=="Weight")      {return(globalout[Fin,4])} 
+  if(outpt == "final" && fit.to=="Consumption") {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
+  if(outpt == "final" && fit.to=="p-value")     {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
 }  # end of function grow_ration_prey()
 
 ########################################################################
@@ -1176,18 +1202,20 @@ time.Start <- proc.time() # start clock to time model run # added by JEB
 
   
 if(fit.to=="Ration"){ 
-  W1.p <- grow_ration(Temperature=Temperature,W=Init_W,outpt="vector",globalout_Prey=globalout_Prey, globalout_Prey_E=globalout_Prey_E)
+  #W1.p <- grow_ration(Temperature=Temperature,W=Init_W,outpt="vector",globalout_Prey=globalout_Prey, globalout_Prey_E=globalout_Prey_E)
+  W1.p <- grow(Temperature=Temperature,W=Init_W,p=p,outpt="vector",globalout_Prey=globalout_Prey, globalout_Prey_E=globalout_Prey_E)
   W1.p #<- cbind(W1.p,W2.p)
 
 }else if(fit.to=="Ration_prey"){ 
-  W1.p <- grow_ration_prey(Temperature=Temperature,W=Init_W,outpt="vector",globalout_Prey=globalout_Prey, globalout_Prey_E=globalout_Prey_E)
+  #W1.p <- grow_ration_prey(Temperature=Temperature,W=Init_W,outpt="vector",globalout_Prey=globalout_Prey, globalout_Prey_E=globalout_Prey_E)
+  W1.p <- grow(Temperature=Temperature,W=Init_W,p=p,outpt="vector",globalout_Prey=globalout_Prey, globalout_Prey_E=globalout_Prey_E)
   W1.p
 }else if(fit.to=="p-value"){ 
   p <- p_value
   W1.p <- grow(Temperature=Temperature,W=Init_W,p=p,outpt="vector",globalout_Prey=globalout_Prey, globalout_Prey_E=globalout_Prey_E)
   W1.p #<- cbind(W1.p,W2.p)
 }else{ 
-  FW <-ifelse(fit.to=="Weight",Final_W,eaten) 
+  FW <-ifelse(fit.to=="Weight",Final_W, eaten) # if fit.to=="Consumption", then set FW to the value of eaten
   p <- 0.5  
   p <- fit.p(p,Init_W, FW, W.tol,max.iter) ###  fit.p(Init_W, FW, W.tol)
   outpt <- "vector"
@@ -1205,7 +1233,7 @@ time.Elapsed <- proc.time() - time.Start # elapsed time # added by JEB
   output$summary <- renderTable({ 
     Model()
     parms <- read.csv("Parameters_official.csv",stringsAsFactors = FALSE) #  Read parameter values from .csv file
-    p <- ifelse(input$fitto=="Ration",NA,format(round(p,4), nsmall = 3))
+    p <- ifelse(input$fitto=="Ration" || input$fitto=="Ration_prey",NA,format(round(p,4), nsmall = 3))
     Growth <- format(round(W1.p[(input$FD-input$ID+1),4],3), nsmall = 3)
     Consom <- format(round(sum(W1.p[,"Specific.Consumption.Rate.Grams"]*W1.p[,"Starting.Weight"]),3), nsmall = 3)
     time.Run <- format(round(time.Elapsed[3],3), nsmall = 3) # 3rd value is total elapsed time JEB
@@ -1418,17 +1446,19 @@ output$pred_ED <- renderPlot({
     Pred_E <- approx(Day_pred,Pred_E, n = last_day_pred, method="linear")$y # interpolate temperature data
     plot(Dayz_pred,Pred_E[First_day:Last_day],type="l",xlab="Day",ylab="Energy Density (J/g)")
   }else if(PREDEDEQ == 2) {
-    X.f = exp(log(1000)/15)  # Find the X.f value which = 1000 when raised to the 15th power
-    X.W <- X.f^(0:15)        # range of weights at even increments along a log(x) axis.
-    Y.ED = rep(1, 16)        # create a vector of 16 numbers.
-    for(j in 0:15) {
+    n.pm1 = 20  # number of points, minus 1; so n.pm1 = 15 means 16 points will be used.
+    X.f = exp(log(1000)/n.pm1)  # Find the X.f value which = 1000 when raised to the 15th power
+    X.W <- X.f^(0:n.pm1)        # range of weights at even increments along a log(x) axis.
+    Y.ED = rep(1, n.pm1+1)      # create a vector of (n.pm1 + 1) numbers.
+    for(j in 0:n.pm1) {
       Y.ED[j+1] = pred_En_D(X.W[j+1], 1, PREDEDEQ)  # compute corresponding Energy Density (J/g)
     }
     plot(X.W, Y.ED, type="l",xlab="Weight (g)",ylab="Energy Density (J/g)", xlog=TRUE, lwd=1.5)
   }else if(PREDEDEQ == 3) {
-    X.f = exp(log(1000)/15)  # Find the X.f value which = 1000 when raised to the 15th power
-    X.W <- X.f^(0:15)        # range of weights at even increments along a log(x) axis.
-    Y.ED <- alpha1*X.W^beta1 # corresponding values of Energy Density
+    n.pm1 = 20  # number of points, minus 1; so n.pm1 = 15 means 16 points will be used.
+    X.f = exp(log(1000)/n.pm1)  # Find the X.f value which = 1000 when raised to the 15th power
+    X.W <- X.f^(0:n.pm1)        # range of weights at even increments along a log(x) axis.
+    Y.ED <- alpha1*X.W^beta1    # corresponding values of Energy Density (J/g)
     plot(X.W, Y.ED, type="l",xlab="Weight (g)",ylab="Energy Density (J/g)", xlog=TRUE, lwd=1.5)
   }
 })  # end of plot of Predator Energy Density
