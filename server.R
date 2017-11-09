@@ -1,6 +1,10 @@
 require(shiny)
 
+# Bioenergetics parameters, by species
 parms <- read.csv("Parameters_official.csv",stringsAsFactors = FALSE) #  Read parameter values from .csv file
+
+#    Main Input files
+Temperature_File = "Main Inputs/Temperature.csv" # Temperature (deg C), over time
 
 shinyServer(function(input, output,session) {
   
@@ -36,12 +40,35 @@ shinyServer(function(input, output,session) {
   
   Oxycal <- input$oxycal              ### Oxycalorific coefficient
   
-  calc.nut <- input$nut               ### added by JEB
-  #calc.nut <- FALSE                   ### Turn off nutrient calculations; added by JEB
+  calc.nut <- input$nut               ### Do nutrient calcs? (TRUE/FALSE)
+
+  calc.contaminant <- input$contaminant  ### Do contaminant calcs? (TRUE/FALSE)
+
+  # Default Input files:
+  #    Main Input files
+  # Temperature_File = "Main Inputs/Temperature.csv" # Temperature (deg C), over time
+  Diet_prop_File   = "Main Inputs/Diet_prop.csv"   # Diet proportions, by prey type, over time
+  Prey_E_File      = "Main Inputs/Prey_E.csv"      # Energy density, by prey type, over time
+  Indigestible_Prey_File = "Main Inputs/Indigestible_Prey.csv" # Fraction indigestible, by prey type, over time
+  Predator_E_File  = "Main Inputs/Pred_E.csv"      # Predator energy density, over time
+  #   Mortality
+  Mortality_File   = "Sub-Models/Mortality/Mortality.csv" # Mortality during time intervals
+  #   Reproduction
+  Reproduction_File= "Sub-Models/Reproduction/Reproduction.csv" # Day(s) and fraction wt lost spawning
+  #   Contaminants
+  Prey_conc_File       = "Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv" # Contam conc in prey, by prey type, over time
+  Contam_assim_File    = "Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv" # Fraction of contaminant assimilated by predator, from each prey type, over time
+  Contam_trans_eff_File= "Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv"  # Transfer efficiency of contam from prey to predator, by prey type, over time
+  #   Phosphorus
+  Phos_Ae_File        = "Sub-Models/Nutrient Regeneration/Phos_Ae.csv" # Predator's Phos assimilation efficiency, by prey type, over time
+  Phos_Conc_Pred_File = "Sub-Models/Nutrient Regeneration/Phos_Conc_Pred.csv" # Phos in predator (g Phos/g), over time
+  Phos_Conc_Prey_File = "Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv" # Phos in prey (g Phos/g), by prey type, over time
+  #   Nitrogen
+  Nit_Ae_File         = "Sub-Models/Nutrient Regeneration/Nit_Ae.csv" # Predator's N assimilation efficiency, by prey type, over time
+  Nit_Conc_Pred_File  = "Sub-Models/Nutrient Regeneration/Nit_Conc_Pred.csv" # N in predator (g N/g), over time
+  Nit_Conc_Prey_File  = "Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv" # N in prey (g N/g), by prey type, over time
   
-  calc.contaminant <- input$contaminant  ### added by JEB
-  #calc.contaminant <- FALSE           ### Turn off contaminant calculations; added by JEB
-  
+    
   ########################################################################
   ### Consumption parameters 
   ########################################################################
@@ -279,7 +306,7 @@ shinyServer(function(input, output,session) {
   ### Temperature 
   ########################################################################
 
-  Temperature <- read.csv("Main Inputs/Temperature.csv",stringsAsFactors = FALSE) #  Read daily Temp values from .csv file
+  Temperature <- read.csv(Temperature_File,stringsAsFactors = FALSE) #  Read daily Temp values from .csv file
   Day <- Temperature[,1] # Days
   Temperature <- Temperature[,2]  # Just use the Temp values, which are in column 2
   last_day <- tail(Day, n = 1)  # get the total number of days
@@ -296,7 +323,9 @@ shinyServer(function(input, output,session) {
   Day_prey <- Diet_prop[,1] # Days
   Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE,stringsAsFactors = FALSE)
   Day_Prey_E <- Prey_E[,1] # Days
-  prey_items <- (ncol(Diet_prop))-1
+  prey_items   <- (ncol(Diet_prop))-1  # number of prey items in Diet_prop file
+  prey_items_E <- (ncol(Prey_E))-1     # number of prey items in Prey_E file
+  if(prey_items != prey_items_E) stop("Must have same number of prey items in file Prey_E.csv as in file Diet_prop.csv")
   last_day_prey <- tail(Day_prey, n = 1)  # get the total number of days
   last_day_prey_E <- tail(Day_Prey_E, n = 1)  # get the total number of days
   
@@ -323,9 +352,11 @@ shinyServer(function(input, output,session) {
   ### Indigestible Prey 
   ########################################################################
   
+  # Fraction of each prey type that are indigestible (See Stewart et al. 1983)
   Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
   Day_ind_prey <- Ind_prey[,1] # Days
   Ind_prey_items <- (ncol(Ind_prey))-1
+  if(prey_items != Ind_prey_items) stop("Must have same number of prey items in file Indigestible_Prey.csv as in file Diet_prop.csv") # JEB
   last_day_ind_prey <- tail(Day_ind_prey, n = 1)  # get the total number of days
   
   globalout_Ind_Prey <- NULL
@@ -444,12 +475,110 @@ Reproduction <- approx(Day,Reproduction, n = last_day, method="constant")$y # in
 Reproduction <- Reproduction[First_day:Last_day]
   
 ########################################################################
+### Body Composition
+###   as Protein, Lipid, Ash and Water
+###   and energy density
+########################################################################  
+# Fish proximate body composition, based on Breck (2014)
+# Breck, J.E. 2014. Body composition in fishes: body size matters. Aquaculture 433:40-49.
+#
+W.0 = Init_W          # initial wet weight (g)
+H2O.fr = 0.728        # assumed fraction water (= 0.72 in Stadnicka et al. Table S4)
+H2O.g = H2O.fr * W.0  # assumed g of water, wet weight
+#
+# Estimate g Protein from g Water
+Protein = function(H2O) {
+  # Regression from Breck (2014), N = 101, r2 = 0.9917
+  Pro = 10**(-0.8068 + 1.0750 * log10(H2O))
+  return(Pro)
+}
+# Estimate g Ash from g Water
+Ash = function(H2O){
+  # Regression from Breck (2014), N = 101, r2 = 0.9932
+  A.g = 10**(-1.6765 + 1.0384 * log10(H2O))
+  return(A.g)
+}
+#
+# Estimate g Fat from W and g water, g Protein, g Ash, by subtraction
+Fat = function(W, H2O, Pro, Ash){
+  F.g = W - H2O - Pro - Ash
+  return(F.g)
+}
+Pro.g = Protein(H2O.g)  # estimate from g water
+Ash.g = Ash(H2O.g)      # estimate from g water
+#
+# Estimate g Fat by subtraction
+# Fat.g = W - H2O.g - Pro.g - Ash.g
+Fat.g = Fat(W.0, H2O.g, Pro.g, Ash.g)
+
+Fat.fr = Fat.g/W.0  # Fat fraction (g Fat/g wet weight)
+Pro.fr = Pro.g/W.0  # Protein fraction (g Protein/g wet weight)
+Ash.fr = Ash.g/W.0  # Ash fraction (g Ash/g wet weight)
+# fraction Protein and Ash, used for contaminant model of Arnot & Gobas (2004): NLOM:non-lipid organic matter
+ProAsh.fr = (Pro.g + Ash.g)/W.0  # Protein + Ash fraction (g Protein+Ash/g wet weight)
+#
+EnDen = function(Fat,Pro,W){
+  ED = (Fat.g*36200 + Pro.g*23600)/W  # J/g wet weight
+  return(ED)
+}
+EnDen.est = EnDen(Fat.g,Pro.g,W.0)  # J/g wet weight
+# end of body composition
+
+########################################################################
 ### Contaminant Accumulation 
 ########################################################################  
-
-X_Pred <- input$init_pred_conc
+# CONTEQ == 1: only food uptake; No clearance, no water uptake; Same as contaminant EQ 1 in FB3.
+#
+# CONTEQ == 2; only food uptake; Yes to clearance, no water uptake; clearance = f(T,W); 
+#    combines EQ 2 & 3 from FB3
+#
+# CONTEQ == 3; food uptake and water uptake; Yes to clearance; model of Arnot & Gobas (2004)
+#    CONTEQ 3 requires several additional input values; these are indicated as input.nnnn below.
+#    We use the Respiration model in FB4 to compute R.O2, oxygen consumption (g O2/g/d), in
+#    estimating uptake of contaminant from water.
+#
+#
+# default concentrations are (micrograms/g), parts per million
+X_Pred <- input$init_pred_conc  # initial contaminant conc in fish (micrograms/g), parts per million
 CONTEQ <- input$cont_acc
+#
+#For testing:
+# CONTEQ = 3  # model of Arnot & Gobas (2004)
+#
+# Parameters and equations for the contaminant model of Arnot & Gobas (2004)
+#
+# Test model using values from Stadnicka et al. () Supporting Information, Table S2.
+# "Pentachlorobenzene"; logKow:5.17; O2:8.87 mg/L; T:15C; W:250 g; time:105 d; Cw:0.0000093 mg/L; Cfinal:0.22 ug/g
+# DO = 10.44 mg/L at T=15 C, so DO_Sat = 85.0 % = 100*8.87/10.44
+input_cont.name = "Pentachlorobenzene"
+cont.name = input_cont.name
+#
+input_logKow = 5.17  # log10(Octanol:water partition coeff) of the contaminant; test using log Kow = 5.0
+logKow = input_logKow
+Kow = 10**logKow
+#
+input_DO_Sat = 85.0   # 85.0 % = 100* 8.87/10.44; Dissolved oxygen saturation (%)
+DO_Sat.fr = input_DO_Sat/100  # convert to fraction DO saturation
+#
+input_Cw_tot = 0.0000093 # total contaminant concentration in water (mg/L) = parts per million
+Cw_tot = input_Cw_tot
+#
+input_phi_DT = 1.0  # fraction of total contam conc in water that is freely dissolved (Cw_dis/Cw_tot)
+phi_DT = input_phi_DT
+# Arnot & Gobas (2004), (Eq.4), give an alternate estimation for phi_DT:
+# phi_DT = 1/(1 + XPOC*DPOC*aPOC*Kow + XDOC*DDOC*aDOC*Kow)  # (eq.4)
+#    where XPOC and XDOC are concentrations of POC and DOC in the water (kg/L)
+#          DPOC and DDOC are the disequilibrium factors for POC and DOC partitioning
+#          aPOC and aDOC are proportionality constants describing phase partitioning relative to octanol
+#          aPOC ~ 0.35; aDOC ~ 0.08  # error bars ~ factor of 2.5 for each.
+Ew = 1/(1.85 + (155/Kow))  # gill chemical uptake efficiency (eq.6)
+# Gv = (1400*Wkg**0.65)/Cox  # ventilation rate (L/d) from resp rate; (eq.8); Note: they don't include T!!
+# R.O2 is Oxygen consumption as g O2/g/d, obtained from Respiration as f(T,W)
 
+# Kbw is the fish:water partition coeff
+Kbw = Fat.fr*Kow + ProAsh.fr*0.035*Kow + H2O.fr  # Arnot & Gobas (2004, eq. 3)
+
+# Concentrations in fish are micrograms/g, or parts per million
 Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE,stringsAsFactors = FALSE)
 Day_conc <- Prey_conc[,1] # Days
 Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE,stringsAsFactors = FALSE)
@@ -487,16 +616,43 @@ colnames(globalout_Prey_Conc) <- names(Prey_conc)[-1]
 colnames(globalout_Prey_ass)  <- names(Prey_ass)[-1]
 colnames(globalout_Trans_eff) <- names(Trans_eff)[-1]
 
-pred_cont_conc <- function(C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,CONTEQ) {
+pred_cont_conc_old <- function(C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,CONTEQ) {
+  # used in testing version of FB4; only two CONTEQ's.
   Burden <- X_Pred*W
   Kx <- ifelse(CONTEQ==2,exp(0.066*Temperature-0.2*log(W)-6.56)/1.5,0)
   Uptake <- ifelse(CONTEQ == 1,sum(C*X_Prey*TEx),sum(C*X_Prey*X_ae))
   Clearance <- ifelse(CONTEQ==2,Kx*Burden,0)
   Accumulation <- Uptake-Clearance
   Burden <- ifelse(CONTEQ == 1,Burden+Uptake,Burden+Accumulation)
-  X_Pred <- Burden/W
+  X_Pred <- Burden/W  # Caution! Should calculate new Conc using "finalwt", not W; JEB
   return(c(Clearance,Uptake,Burden,X_Pred))     
 }
+
+# Includes CONTEQ 3 for Arnot & Gobas (2004)
+pred_cont_conc <- function(R.O2,C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,Ew,Kbw,CONTEQ) {
+  Burden <- X_Pred*W  # Burden in micrograms; This uses W and X_Pred at **start** of day
+  if(CONTEQ==1) {
+    Uptake <- sum(C*X_Prey*TEx)   # uptake from food only; no elimination
+    Kx <- 0  # no elimination
+  } else if(CONTEQ==2) {
+    Uptake <- sum(C*X_Prey*X_ae)  # uptake from food only (no uptake from water)
+    Kx <- exp(0.066*Temperature-0.2*log(W)-6.56)  # MeHg elimination rate coeff; Trudel & Rasmussen (1997)
+  } else if(CONTEQ==3) {
+    VOx = 1000*R.O2  # (mg O2/g/d) = (1000 mg/g)*(g O2/g/d), where R.O2 is (g O2/g/d)
+    COx = (-0.24*Temperature +14.04)*DO_Sat.fr  # dissolved oxygen concentration (mg O2/L); (eq.9)
+    K1 = Ew*VOx/COx  # water cleared of contaminant per g per day; (L/g/day), proportional to Resp
+    Uptake.water = W*K1*phi_DT*Cw_tot*1000  # contam from water (ug/d); (L/day)*(mg/L)*(1000 ug/mg)
+    Uptake.food  = sum(C*X_Prey*X_ae)  # contam in all food eaten (ug/d); (g/d)*(ug/g)
+    Uptake = Uptake.water + Uptake.food  # (ug/d)
+    Kx = K1/Kbw  # clearance rate is proportional to K1 and to 1/fish:water partition coefficient
+  }
+  Clearance <- Kx*Burden
+  Accumulation <- Uptake - Clearance  # Accumulation = net change in Burden
+  Burden = Burden + Accumulation  # update Burden
+  #X_Pred <- Burden/W  # update predator contaminant concentration using new Burden & FINALWEIGHT!
+  return(c(Clearance,Uptake,Burden,NA))  # Use NA to save a place for X_Pred    
+}
+# end of predator contaminant accumulation
 
 ########################################################################
 ### Nutrient Regeneration
@@ -596,6 +752,8 @@ nitrogen_allocation <- function(C,n_conc_prey,AEn,weightgain,n_conc_pred) {
   Fn <- Cnsum-Gn-Un
   return(c(Cnsum,Gn,Un,Fn))
 }
+# end of nutrient regeneration
+
 ########################################################################
 ### Growth Function using p-value
 ########################################################################
@@ -716,7 +874,8 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     Eg  <- egestion(C=Cons,Temperature=Temperature[i],p=p, EGEQ=EGEQ) # Egestion in J/g
     Ex  <- excretion(C=Cons, Eg=Eg,Temperature=Temperature[i], p=p, EXEQ=EXEQ) # Excretion in J/g
     SpecDA  <- SpDynAct(C=Cons,Eg=Eg) # Specific dynamic action in J/g 
-    Res  <- respiration(Temperature=Temperature[i], W=W, REQ)*Oxycal # respiration in J/g 
+    R.O2  <- respiration(Temperature=Temperature[i], W=W, REQ) # respiration in (g O2/g) 
+    Res <- R.O2*Oxycal  # respiration in (J/g) = (g O2/g)*(j/g O2); Oxycal = 13560 J/g O2
     
     G <-  Cons - (Res + Eg + Ex + SpecDA) # Energy put towards growth in J/g
     
@@ -766,11 +925,17 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     }
     
     if(calc.contaminant==TRUE){
-      Cont <- pred_cont_conc(C=Cons_cont,W=finalwt,Temperature=Temperature,X_Prey=globalout_Prey_Conc[i,],X_Pred=X_Pred,TEx=globalout_Trans_eff[i,],X_ae=globalout_Prey_ass[i,],CONTEQ=CONTEQ)  
-      X_Pred <- Cont[4]
+      #Cont <- pred_cont_conc_old(C=Cons_cont,W=finalwt,Temperature=Temperature,X_Prey=globalout_Prey_Conc[i,],X_Pred=X_Pred,TEx=globalout_Trans_eff[i,],X_ae=globalout_Prey_ass[i,],CONTEQ=CONTEQ)  
+      Cont <- pred_cont_conc(R.O2=R.O2,C=Cons_cont,W=W,Temperature=Temperature[i],
+                             X_Prey=globalout_Prey_Conc[i,],X_Pred=X_Pred,
+                             TEx=globalout_Trans_eff[i,],X_ae=globalout_Prey_ass[i,],
+                             Ew=Ew, Kbw=Kbw, CONTEQ=CONTEQ)  
+      X_Pred <- Cont[3]/finalwt  # Calc new burden for this day, then calc conc at end of day
+      Cont[4] = X_Pred
     } else {
       Cont <- NA
     }
+
     ConsW <- Cons*W  # units (J) = (J/g)*(g); save a repeated multiplication
     
     if(outpt != "End") {  # Daily values not needed if only fitting final weight or cons
@@ -855,313 +1020,6 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
   
 }  # end of function grow()
    
-
-########################################################################
-### Growth Function using ration
-########################################################################
-
-# These calculations have now been consolidated in function grow(); JEB
-# This function grow_ration() is no longer needed; JEB
-grow_ration <- function(Temperature, W, outpt, globalout_Prey, globalout_Prey_E) { # Growth as a function of temperature, weight, p-value, prey proportion and energy density and predator energy density
-  globalout <- NULL # Create a blank dataframe to store outputs
-  for(i in 1:Fin) { # Create a loop that estimates growth for the duration of the simulation (Fin)
-    if(input$pop_mort==TRUE){ 
-      Ind2 <- globalout_individuals[i,2] # Population mortality
-    }else{
-      Ind2 <- 1
-      Ind <- 1
-    }
-    Pred_E_i <- pred_En_D(W=W,day=i,PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
-    Pred_E_iplusone <- pred_En_D(W=W,day=(i+1),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
-    # start of special code needed for grow_ration:
-    Cons <- Ration*sum(globalout_Prey[i,]*globalout_Prey_E[i,])
-    Cons_p <- consumption(Temperature=Temperature[i], W=W, p=1, CEQ=CEQ)* # Consumption in J/g
-      sum(globalout_Prey[i,]*globalout_Prey_E[i,])
-    p <- Cons/Cons_p
-    # end of special code needed for grow_ration.
-    Cons_prey_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in (J)
-                                  (globalout_Prey[i,]*globalout_Prey_E[i,])*W))
-    colnames(Cons_prey_J) <- paste(colnames(Cons_prey_J),"Joules", sep = " ")
-    Cons_prey_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in (g)
-                                  (globalout_Prey[i,]*W)))
-    colnames(Cons_prey_G) <- paste(colnames(Cons_prey_G),"Grams", sep = " ")
-    Cons_prey_pop_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in J
-                                  (globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind))
-    colnames(Cons_prey_pop_J) <- paste(colnames(Cons_prey_pop_J),"pop.Joules", sep = " ")
-    Cons_prey_pop_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in g
-                                  (globalout_Prey[i,]*W*Ind)))
-    colnames(Cons_prey_pop_G) <- paste(colnames(Cons_prey_pop_G),"pop.Grams", sep = " ")
-    Eg  <- egestion(C=Cons,Temperature=Temperature[i], p=p, EGEQ=EGEQ) # Egestion in J/g
-    Ex  <- excretion(C=Cons, Eg=Eg,Temperature=Temperature[i], p=p, EXEQ=EXEQ) # Excretion in J/g
-    SpecDA  <- SpDynAct(C=Cons,Eg=Eg) # Specific dynamic action in J/g 
-    Res  <- respiration(Temperature=Temperature[i], W=W, REQ)*Oxycal # respiration in J/g 
-    
-    G <-  Cons - (Res + Eg + Ex + SpecDA) # Energy put towards growth in J/g
-    
-    egain  <-  (G * W)      # net energy gain in J
-    
-    delta_B <- Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])
-    
-    if(PREDEDEQ == 3) {
-      finalwt <- ((egain+(Pred_E_i*W))/alpha1)^(1/(beta1+1))
-    }else if(PREDEDEQ == 2){
-      alpha <- ifelse(W<as.numeric(cutoff),alpha1,alpha2)
-      beta <-  ifelse(W<as.numeric(cutoff),beta1,beta2)
-      finalwt <- (-alpha + sqrt(alpha^2 + (4*beta*(W*(alpha+beta*W)+egain))))/(2*beta)
-    }else{
-      finalwt <- (egain+(Pred_E_i*W))/Pred_E_iplusone
-    }
-    #finalwt  <-  (egain+(Pred_E_i*W))/Pred_E_iplusone  # Predator weight at end of current day (g)
-    
-    #dGrams = (G/Pred_E)  		# Weight (g) gained = Net energy gain (J) / Predator energy density (J) 
-    
-    weightgain  <-  finalwt-W		#change in g/day
-    
-    #finale <- (W*Pred_E) + egain # Predator energy density
-    
-    if(input$spawn==TRUE){ # Spwaning function
-      spawn <- Reproduction[i]
-    }else{
-      spawn <- 0
-    }
-    
-    Cons_cont <- Ration*globalout_Prey[i,]  # special code needed for grow_ration
-    
-    if(calc.nut==TRUE){
-      Phos <- phosphorous_allocation(C=Cons_cont,p_conc_prey=globalout_Phos_Conc_Prey[i,],AEp=globalout_Phos_Ae[i,],weightgain=weightgain,p_conc_pred=globalout_Phos_Conc_Pred[i,])
-      Nit <- nitrogen_allocation(C=Cons_cont,n_conc_prey=globalout_Nit_Conc_Prey[i,],AEn=globalout_Nit_Ae[i,],weightgain=weightgain,n_conc_pred=globalout_Phos_Conc_Pred[i,])
-    } else{
-      Phos <- NA
-      Nit <- NA
-    }
-    
-    if(calc.contaminant==TRUE){
-      Cont <- pred_cont_conc(C=Cons_cont,W=finalwt,Temperature=Temperature,X_Prey=globalout_Prey_Conc[i,],X_Pred=X_Pred,X_ae=globalout_Prey_ass[i,],CONTEQ=CONTEQ)  
-      X_Pred <- Cont[4]
-    } else {
-      Cont <- NA
-    }
-    
-    
-    globalout<-rbind(globalout,cbind(data.frame(Day=Day_Temp[i],
-                                          Temperature=Temperature[i],
-                                          Starting.Weight=W,
-                                          Weight=finalwt-(spawn*finalwt),
-                                          Population.Number=Ind2,
-                                          Population.Biomass=finalwt*Ind,
-                                          Specific.Growth.Rate.Joules=G,
-                                          Specific.Consumption.Rate.Joules=Cons,
-                                          Specific.Egestion.Rate=Eg,
-                                          Specific.Excretion.Rate=Ex,
-                                          Specific.Respiration.Rate=Res,
-                                          Specific.SDA.Rate=SpecDA,
-                                          Specific.Consumption.Rate.Grams=Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,]),
-                                          Specific.Growth.Rate.Grams=G/sum(globalout_Prey[i,]*globalout_Prey_E[i,]),
-                                          Initial.Predator.Energy.Density=Pred_E_i,
-                                          Final.Predator.Energy.Density=Pred_E_iplusone,
-                                          Mean.Prey.Energy.Density=sum(globalout_Prey[i,]*globalout_Prey_E[i,]),
-                                          Gross.Production.Grams=(Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i,
-                                          Gross.Production.Joules=(Cons +Res + Eg + Ex + SpecDA)*W,
-                                          Cum.Gross.Production.Grams=cumsum((Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i),
-                                          Cum.Gross.Production.Joules=cumsum((Cons +Res + Eg + Ex + SpecDA)*W),
-                                          Gametic.Production.Grams=spawn*finalwt,
-                                          Gametic.Production.Joules=spawn*finalwt*Pred_E_i,
-                                          Net.Production.Grams=weightgain,
-                                          Net.Production.Joules=egain,
-                                          Cum.Net.Production.Grams=cumsum(weightgain),
-                                          Cum.Net.Production.Joules=cumsum(egain),
-                                          Prey.Tot.Ind.Grams=Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W, 
-                                          Prey.Tot.Ind.Joules=Cons*W,
-                                          Cum.Prey.Tot.Ind.Grams=cumsum(Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W), 
-                                          Cum.Prey.Tot.Ind.Joules=cumsum(Cons*W),
-                                          Prey.Tot.Pop.Grams=Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind,
-                                          Prey.Tot.Pop.Joules=Cons*W*Ind,
-                                          Cum.Prey.Tot.Pop.Grams=cumsum(Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind),
-                                          Cum.Prey.Tot.Pop.Joules=cumsum(Cons*W*Ind),
-                                          Mortality.number=Ind-Ind2,
-                                          Mortality.Grams=(Ind-Ind2)*W,
-                                          Nitrogen.Egestion=Nit[4],
-                                          Phosphorous.Egestion=Phos[4],
-                                          N.to.P.Egestion=Nit[4]/Phos[4],
-                                          Nitrogen.Excretion=Nit[3],
-                                          Phosphorous.Excretion=Phos[3],
-                                          N.to.P.Excretion=Nit[3]/Phos[3],
-                                          Nitrogen.Consumption=Nit[1],
-                                          Phosphorous.Consumption=Phos[1],
-                                          N.to.P.Consumption=Nit[1]/Phos[1],
-                                          Nitrogen.Growth=Nit[2],
-                                          Phosphorous.Growth=Phos[2],
-                                          N.to.P.Growth=Nit[2]/Phos[2],
-                                          Clearance.Rate=Cont[1],
-                                          Contaminant.Uptake=Cont[2],
-                                          Contaminant.Burden=Cont[3],
-                                          Contaminant.Predator.Concentration=Cont[4]),
-                                          Cons_prey_J,Cons_prey_G,Cons_prey_pop_J,Cons_prey_pop_G))
-    
-    W <- finalwt-(spawn*finalwt) # Weight at the end of the day serves as the starting weight for the next day
-    Ind <- Ind2
-  } 
-  globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")] <- 
-    cumsum( globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")])
-  if(outpt == "vector") {return(globalout)} 
-  if(outpt == "final" && fit.to=="Weight")     {return(globalout[Fin,4])} 
-  if(outpt == "final" && fit.to=="Consumption"){return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
-  if(outpt == "final" && fit.to=="p-value")    {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
-}  # end of function grow_ration()
-
-########################################################################
-### Growth Function using fixed ration
-########################################################################
-
-# These calculations have now been consolidated in function grow(); JEB
-# This function grow_ration_prey() is no longer needed; JEB
-grow_ration_prey <- function(Temperature, W, outpt, globalout_Prey, globalout_Prey_E) { # Growth as a function of temperature, weight, p-value, prey proportion and energy density and predator energy density
-  globalout <- NULL # Create a blank dataframe to store outputs
-  for(i in 1:Fin) { # Create a loop that estimates growth for the duration of the simulation (Fin)
-    if(input$pop_mort==TRUE){ 
-      Ind2 <- globalout_individuals[i,2] # Population mortality
-    }else{
-      Ind2 <- 1
-      Ind <- 1
-    }
-    Pred_E_i <- pred_En_D(W=W,day=i,PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
-    Pred_E_iplusone <- pred_En_D(W=W,day=(i+1),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
-    # start of special code for grow_ration_prey():
-    Cons <- Ration_prey*sum(globalout_Prey[i,]*globalout_Prey_E[i,])/W
-    Cons_p <- consumption(Temperature=Temperature[i], W=W, p=1, CEQ=CEQ)* # Consumption in J/g
-      sum(globalout_Prey[i,]*globalout_Prey_E[i,])
-    p <- Cons/Cons_p
-    # end of special code for grow_ration_prey().
-    Cons_prey_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in J
-                                  (globalout_Prey[i,]*globalout_Prey_E[i,])*W))
-    colnames(Cons_prey_J) <- paste(colnames(Cons_prey_J),"Joules", sep = " ")
-    Cons_prey_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in g
-                                  (globalout_Prey[i,]*W)))
-    colnames(Cons_prey_G) <- paste(colnames(Cons_prey_G),"Grams", sep = " ")
-    Cons_prey_pop_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in J
-                                      (globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind))
-    colnames(Cons_prey_pop_J) <- paste(colnames(Cons_prey_pop_J),"pop.Joules", sep = " ")
-    Cons_prey_pop_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in g
-                                      (globalout_Prey[i,]*W*Ind)))
-    colnames(Cons_prey_pop_G) <- paste(colnames(Cons_prey_pop_G),"pop.Grams", sep = " ")
-    Eg  <- egestion(C=Cons,Temperature=Temperature[i], p=p, EGEQ=EGEQ) # Egestion in J/g
-    Ex  <- excretion(C=Cons, Eg=Eg,Temperature=Temperature[i], p=p, EXEQ=EXEQ) # Excretion in J/g
-    SpecDA  <- SpDynAct(C=Cons,Eg=Eg) # Specific dynamic action in J/g 
-    Res  <- respiration(Temperature=Temperature[i], W=W, REQ)*Oxycal # respiration in J/g 
-    
-    G <-  Cons - (Res + Eg + Ex + SpecDA) # Energy put towards growth in J/g
-    
-    egain  <-  (G * W)      # net energy gain in J
-    
-    delta_B <- Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])
-    
-    if(PREDEDEQ == 3) {
-      finalwt <- ((egain+(Pred_E_i*W))/alpha1)^(1/(beta1+1))
-    }else if(PREDEDEQ == 2){
-      alpha <- ifelse(W<as.numeric(cutoff),alpha1,alpha2)
-      beta <-  ifelse(W<as.numeric(cutoff),beta1,beta2)
-      finalwt <- (-alpha + sqrt(alpha^2 + (4*beta*(W*(alpha+beta*W)+egain))))/(2*beta)
-    }else{
-      finalwt <- (egain+(Pred_E_i*W))/Pred_E_iplusone
-    }
-    #finalwt  <-  (egain+(Pred_E_i*W))/Pred_E_iplusone  # Predator weight at end of current day (g)
-    
-    #dGrams = (G/Pred_E)    	# Weight (g) gained = Net energy gain (J) / Predator energy density (J) 
-    
-    weightgain  <-  finalwt-W		#change in g/day
-    
-    #finale <- (W*Pred_E) + egain # Predator energy density
-    
-    if(input$spawn==TRUE){ # Spwaning function
-      spawn <- Reproduction[i]
-    }else{
-      spawn <- 0
-    }
-    
-    
-    Cons_cont <- Ration*globalout_Prey[i,]
-    
-    if(calc.nut==TRUE){
-      Phos <- phosphorous_allocation(C=Cons_cont,p_conc_prey=globalout_Phos_Conc_Prey[i,],AEp=globalout_Phos_Ae[i,],weightgain=weightgain,p_conc_pred=globalout_Phos_Conc_Pred[i,])
-      Nit <- nitrogen_allocation(C=Cons_cont,n_conc_prey=globalout_Nit_Conc_Prey[i,],AEn=globalout_Nit_Ae[i,],weightgain=weightgain,n_conc_pred=globalout_Phos_Conc_Pred[i,])
-    } else{
-      Phos <- NA
-      Nit <- NA
-    }
-    
-    if(calc.contaminant==TRUE){
-      Cont <- pred_cont_conc(C=Cons_cont,W=finalwt,Temperature=Temperature,X_Prey=globalout_Prey_Conc[i,],X_Pred=X_Pred,X_ae=globalout_Prey_ass[i,],CONTEQ=CONTEQ)  
-      X_Pred <- Cont[4]
-    } else {
-      Cont <- NA
-    }
-    
-    
-    globalout<-rbind(globalout,cbind(data.frame(Day=Day_Temp[i],
-                                          Temperature=Temperature[i],
-                                          Starting.Weight=W,
-                                          Weight=finalwt-(spawn*finalwt),
-                                          Population.Number=Ind2,
-                                          Population.Biomass=finalwt*Ind,
-                                          Specific.Growth.Rate.Joules=G,
-                                          Specific.Consumption.Rate.Joules=Cons,
-                                          Specific.Egestion.Rate=Eg,
-                                          Specific.Excretion.Rate=Ex,
-                                          Specific.Respiration.Rate=Res,
-                                          Specific.SDA.Rate=SpecDA,
-                                          Specific.Consumption.Rate.Grams=Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,]),
-                                          Specific.Growth.Rate.Grams=G/sum(globalout_Prey[i,]*globalout_Prey_E[i,]),
-                                          Initial.Predator.Energy.Density=Pred_E_i,
-                                          Final.Predator.Energy.Density=Pred_E_iplusone,
-                                          Mean.Prey.Energy.Density=sum(globalout_Prey[i,]*globalout_Prey_E[i,]),
-                                          Gross.Production.Grams=(Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i,
-                                          Gross.Production.Joules=(Cons +Res + Eg + Ex + SpecDA)*W,
-                                          Cum.Gross.Production.Grams=cumsum((Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i),
-                                          Cum.Gross.Production.Joules=cumsum((Cons +Res + Eg + Ex + SpecDA)*W),
-                                          Gametic.Production.Grams=spawn*finalwt,
-                                          Gametic.Production.Joules=spawn*finalwt*Pred_E_i,
-                                          Net.Production.Grams=weightgain,
-                                          Net.Production.Joules=egain,
-                                          Cum.Net.Production.Grams=cumsum(weightgain),
-                                          Cum.Net.Production.Joules=cumsum(egain),
-                                          Prey.Tot.Ind.Grams=Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W, 
-                                          Prey.Tot.Ind.Joules=Cons*W,
-                                          Cum.Prey.Tot.Ind.Grams=cumsum(Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W), 
-                                          Cum.Prey.Tot.Ind.Joules=cumsum(Cons*W),
-                                          Prey.Tot.Pop.Grams=Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind,
-                                          Prey.Tot.Pop.Joules=Cons*W*Ind,
-                                          Cum.Prey.Tot.Pop.Grams=cumsum(Cons/sum(globalout_Prey[i,]*globalout_Prey_E[i,])*W*Ind),
-                                          Cum.Prey.Tot.Pop.Joules=cumsum(Cons*W*Ind),
-                                          Mortality.number=Ind-Ind2,
-                                          Mortality.Grams=(Ind-Ind2)*W,
-                                          Nitrogen.Egestion=Nit[4],
-                                          Phosphorous.Egestion=Phos[4],
-                                          N.to.P.Egestion=Nit[4]/Phos[4],
-                                          Nitrogen.Excretion=Nit[3],
-                                          Phosphorous.Excretion=Phos[3],
-                                          N.to.P.Excretion=Nit[3]/Phos[3],
-                                          Nitrogen.Consumption=Nit[1],
-                                          Phosphorous.Consumption=Phos[1],
-                                          N.to.P.Consumption=Nit[1]/Phos[1],
-                                          Nitrogen.Growth=Nit[2],
-                                          Phosphorous.Growth=Phos[2],
-                                          N.to.P.Growth=Nit[2]/Phos[2],
-                                          Clearance.Rate=Cont[1],
-                                          Contaminant.Uptake=Cont[2],
-                                          Contaminant.Burden=Cont[3],
-                                          Contaminant.Predator.Concentration=Cont[4]),
-                                          Cons_prey_J,Cons_prey_G,Cons_prey_pop_J,Cons_prey_pop_G))
-    
-    W <- finalwt-(spawn*finalwt) # Weight at the end of the day serves as the starting weight for the next day
-    Ind <- Ind2
-  } 
-  globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")] <- 
-    cumsum( globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")])
-  if(outpt == "vector") {return(globalout)} 
-  if(outpt == "final" && fit.to=="Weight")      {return(globalout[Fin,4])} 
-  if(outpt == "final" && fit.to=="Consumption") {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
-  if(outpt == "final" && fit.to=="p-value")     {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Initial.Weight']))}
-}  # end of function grow_ration_prey()
 
 ########################################################################
 ### binary search algorithm for p-value 
@@ -1321,7 +1179,7 @@ output$parameters <- renderTable({
 output$temp <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
   Last_day    <- input$FD             ### Last day of the simulation
-  Temperature <- read.csv("Main Inputs/Temperature.csv",stringsAsFactors = FALSE) #  Read daily Temp values from .csv file
+  Temperature <- read.csv(Temperature_File,stringsAsFactors = FALSE) #  Read daily Temp values from .csv file
   Day <- Temperature[,1] # Days
   Temperature <- Temperature[,2]  # Just use the Temp values, which are in column 2
   last_day <- tail(Day, n = 1)  # get the total number of days
@@ -1404,7 +1262,7 @@ colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
        ylim=c(min(Ind_prey[,2:(ncol(Ind_prey))]),max(Ind_prey[,2:(ncol(Ind_prey))])),xlab="Day",ylab="Indigestible Prey (proportion)")
   if(Ind_prey_items>=2){
     for(i in 2:Ind_prey_items){
-      lines(First_day:Last_day,globalout_Ind_Prey[,i],type="l",col=i+1)  
+      lines(First_day:Last_day,globalout_Ind_Prey[,i],type="l",col=i+1)
     }
   }
   legend("topleft",col=2:(Ind_prey_items+1),lty=1,legend=colnames(globalout_Ind_Prey), bty = "n")
@@ -1425,8 +1283,8 @@ output$pred_ED <- renderPlot({
   # Alternatively, could this function (and others) be defined for use in the entire session?? JEB
   pred_En_D <- function(W,day,PREDEDEQ) {  # function copied directly from earlier in the code; JEB
     if(PREDEDEQ == 1) {return(Pred_E[day])   
-    } else if(PREDEDEQ == 3) {return(alpha1*W^beta1)  
-    } else if(PREDEDEQ == 2) {
+    } else if(PREDEDEQ == 3) {return(alpha1*W^beta1)  # Note that ED is nonlinear in W for PREDEQ 3
+    } else if(PREDEDEQ == 2) {   # Note that for PREDEQ 2, ED is linear in W, changing slope at cutoff 
       if(W <as.numeric(cutoff)) {return((as.numeric(alpha1) + as.numeric(beta1)*W))}
       if(W>=as.numeric(cutoff)) {return((as.numeric(alpha2) + as.numeric(beta2)*W))} 
       if(W <as.numeric(cutoff) && as.numeric(beta1) == 0) {return((as.numeric(alpha1)))}  
@@ -1446,17 +1304,19 @@ output$pred_ED <- renderPlot({
     Pred_E <- approx(Day_pred,Pred_E, n = last_day_pred, method="linear")$y # interpolate temperature data
     plot(Dayz_pred,Pred_E[First_day:Last_day],type="l",xlab="Day",ylab="Energy Density (J/g)")
   }else if(PREDEDEQ == 2) {
-    n.pm1 = 20  # number of points, minus 1; so n.pm1 = 15 means 16 points will be used.
-    X.f = exp(log(1000)/n.pm1)  # Find the X.f value which = 1000 when raised to the 15th power
-    X.W <- X.f^(0:n.pm1)        # range of weights at even increments along a log(x) axis.
-    Y.ED = rep(1, n.pm1+1)      # create a vector of (n.pm1 + 1) numbers.
-    for(j in 0:n.pm1) {
-      Y.ED[j+1] = pred_En_D(X.W[j+1], 1, PREDEDEQ)  # compute corresponding Energy Density (J/g)
+    npt = 3  # number of points. PREDEDEQ 2 is linear in W, so go from 1 to cutoff to Wmax.
+    Wco = as.numeric(cutoff)  # Weight at the change in slope for ED
+    Wmax = 1.25*(as.numeric(cutoff))  # Set upper limit of W axis to 1.5*cutoff, to show change in slope
+    X.W <- c(1, Wco, Wmax)  # go from 1 to cutoff to Wmax.
+    Y.ED = rep(1, npt)      # create a vector of (3) numbers.
+    for(j in 1:npt) {
+      Y.ED[j] = pred_En_D(X.W[j], 1, PREDEDEQ)  # compute corresponding Energy Density (J/g)
     }
-    plot(X.W, Y.ED, type="l",xlab="Weight (g)",ylab="Energy Density (J/g)", xlog=TRUE, lwd=1.5)
+    plot(X.W, Y.ED, type="l",xlab="Weight (g)",ylab="Energy Density (J/g)", lwd=1.5)
+    abline(v = as.numeric(cutoff), lty = "dotted", col = "red") # vertical red dotted line at cutoff
   }else if(PREDEDEQ == 3) {
-    n.pm1 = 20  # number of points, minus 1; so n.pm1 = 15 means 16 points will be used.
-    X.f = exp(log(1000)/n.pm1)  # Find the X.f value which = 1000 when raised to the 15th power
+    n.pm1 = 20  # number of points, minus 1; so n.pm1 = 20 means 21 points will be used.
+    X.f = exp(log(1000)/n.pm1)  # Find the X.f value which = 1000 when raised to the 20th power
     X.W <- X.f^(0:n.pm1)        # range of weights at even increments along a log(x) axis.
     Y.ED <- alpha1*X.W^beta1    # corresponding values of Energy Density (J/g)
     plot(X.W, Y.ED, type="l",xlab="Weight (g)",ylab="Energy Density (J/g)", xlog=TRUE, lwd=1.5)
