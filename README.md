@@ -1,5 +1,7 @@
 ## Welcome to Fish Bioenergetics 4.0
 
+__New version coming soon!__ Version 1.0.0 of the FB4 software will be available in the next few days. The new software and an update of the User Manual should be available during the week of November 13, 2017. When the update is available, you will be able to click a button on this web page to download the software and User Manual as a zipped file.  Coming soon!
+
 There are two main goals of this website:
 - First, to make the current bioenergetics software available and easy to use;
 - Second, to facilitate the wider use and further development of the bioenergetics approach.
