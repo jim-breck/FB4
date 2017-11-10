@@ -5,6 +5,26 @@ parms <- read.csv("Parameters_official.csv",stringsAsFactors = FALSE) #  Read pa
 
 #    Main Input files
 Temperature_File = "Main Inputs/Temperature.csv" # Temperature (deg C), over time
+Diet_prop_File   = "Main Inputs/Diet_prop.csv"   # Diet proportions, by prey type, over time
+Prey_E_File      = "Main Inputs/Prey_E.csv"      # Energy density, by prey type, over time
+Indigestible_Prey_File = "Main Inputs/Indigestible_Prey.csv" # Fraction indigestible, by prey type, over time
+Predator_E_File  = "Main Inputs/Pred_E.csv"      # Predator energy density, over time
+#   Mortality
+Mortality_File   = "Sub-Models/Mortality/Mortality.csv" # Mortality during time intervals
+#   Reproduction
+Reproduction_File= "Sub-Models/Reproduction/Reproduction.csv" # Day(s) and fraction wt lost spawning
+#   Contaminants
+Prey_conc_File       = "Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv" # Contam conc in prey, by prey type, over time
+Contam_assim_File    = "Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv" # Fraction of contaminant assimilated by predator, from each prey type, over time
+Contam_trans_eff_File= "Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv"  # Transfer efficiency of contam from prey to predator, by prey type, over time
+#   Phosphorus
+Phos_Ae_File        = "Sub-Models/Nutrient Regeneration/Phos_Ae.csv" # Predator's Phos assimilation efficiency, by prey type, over time
+Phos_Conc_Pred_File = "Sub-Models/Nutrient Regeneration/Phos_Conc_Pred.csv" # Phos in predator (g Phos/g), over time
+Phos_Conc_Prey_File = "Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv" # Phos in prey (g Phos/g), by prey type, over time
+#   Nitrogen
+Nit_Ae_File         = "Sub-Models/Nutrient Regeneration/Nit_Ae.csv" # Predator's N assimilation efficiency, by prey type, over time
+Nit_Conc_Pred_File  = "Sub-Models/Nutrient Regeneration/Nit_Conc_Pred.csv" # N in predator (g N/g), over time
+Nit_Conc_Prey_File  = "Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv" # N in prey (g N/g), by prey type, over time
 
 shinyServer(function(input, output,session) {
   
@@ -47,26 +67,6 @@ shinyServer(function(input, output,session) {
   # Default Input files:
   #    Main Input files
   # Temperature_File = "Main Inputs/Temperature.csv" # Temperature (deg C), over time
-  Diet_prop_File   = "Main Inputs/Diet_prop.csv"   # Diet proportions, by prey type, over time
-  Prey_E_File      = "Main Inputs/Prey_E.csv"      # Energy density, by prey type, over time
-  Indigestible_Prey_File = "Main Inputs/Indigestible_Prey.csv" # Fraction indigestible, by prey type, over time
-  Predator_E_File  = "Main Inputs/Pred_E.csv"      # Predator energy density, over time
-  #   Mortality
-  Mortality_File   = "Sub-Models/Mortality/Mortality.csv" # Mortality during time intervals
-  #   Reproduction
-  Reproduction_File= "Sub-Models/Reproduction/Reproduction.csv" # Day(s) and fraction wt lost spawning
-  #   Contaminants
-  Prey_conc_File       = "Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv" # Contam conc in prey, by prey type, over time
-  Contam_assim_File    = "Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv" # Fraction of contaminant assimilated by predator, from each prey type, over time
-  Contam_trans_eff_File= "Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv"  # Transfer efficiency of contam from prey to predator, by prey type, over time
-  #   Phosphorus
-  Phos_Ae_File        = "Sub-Models/Nutrient Regeneration/Phos_Ae.csv" # Predator's Phos assimilation efficiency, by prey type, over time
-  Phos_Conc_Pred_File = "Sub-Models/Nutrient Regeneration/Phos_Conc_Pred.csv" # Phos in predator (g Phos/g), over time
-  Phos_Conc_Prey_File = "Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv" # Phos in prey (g Phos/g), by prey type, over time
-  #   Nitrogen
-  Nit_Ae_File         = "Sub-Models/Nutrient Regeneration/Nit_Ae.csv" # Predator's N assimilation efficiency, by prey type, over time
-  Nit_Conc_Pred_File  = "Sub-Models/Nutrient Regeneration/Nit_Conc_Pred.csv" # N in predator (g N/g), over time
-  Nit_Conc_Prey_File  = "Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv" # N in prey (g N/g), by prey type, over time
   
     
   ########################################################################
@@ -319,9 +319,9 @@ shinyServer(function(input, output,session) {
   ### Diet proportions and energetical contribution 
   ########################################################################
   
-  Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE,stringsAsFactors = FALSE)
+  Diet_prop <- read.csv(Diet_prop_File,head=TRUE,stringsAsFactors = FALSE)
   Day_prey <- Diet_prop[,1] # Days
-  Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE,stringsAsFactors = FALSE)
+  Prey_E <- read.csv(Prey_E_File,head=TRUE,stringsAsFactors = FALSE)
   Day_Prey_E <- Prey_E[,1] # Days
   prey_items   <- (ncol(Diet_prop))-1  # number of prey items in Diet_prop file
   prey_items_E <- (ncol(Prey_E))-1     # number of prey items in Prey_E file
@@ -337,12 +337,12 @@ shinyServer(function(input, output,session) {
     Prey <- approx(Day_prey,Prey, n = last_day_prey,method="linear")$y # interpolate prey 1 energy density
     Prey <- Prey[First_day:Last_day]
     globalout_Prey <- cbind(globalout_Prey,Prey)  # Proportion of each prey type in the diet
-    Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE,stringsAsFactors = FALSE)
+    Diet_prop <- read.csv(Diet_prop_File,head=TRUE,stringsAsFactors = FALSE)
     Prey_E <- Prey_E[,i+1]  
-    Prey_E <- approx(Day_Prey_E,Prey_E, n = last_day_prey_E,method="constant")$y # interpolate prey 1 energy density
+    Prey_E <- approx(Day_Prey_E,Prey_E, n = last_day_prey_E,method="linear")$y # interpolate prey 1 energy density
     Prey_E <- Prey_E[First_day:Last_day]
     globalout_Prey_E <- cbind(globalout_Prey_E,Prey_E)
-    Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE,stringsAsFactors = FALSE)
+    Prey_E <- read.csv(Prey_E_File,head=TRUE,stringsAsFactors = FALSE)
   }
   
   colnames(globalout_Prey) <- names(Diet_prop)[-1]
@@ -353,7 +353,7 @@ shinyServer(function(input, output,session) {
   ########################################################################
   
   # Fraction of each prey type that are indigestible (See Stewart et al. 1983)
-  Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
+  Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE,stringsAsFactors = FALSE)
   Day_ind_prey <- Ind_prey[,1] # Days
   Ind_prey_items <- (ncol(Ind_prey))-1
   if(prey_items != Ind_prey_items) stop("Must have same number of prey items in file Indigestible_Prey.csv as in file Diet_prop.csv") # JEB
@@ -366,7 +366,7 @@ shinyServer(function(input, output,session) {
     Prey <- approx(Day_ind_prey,Prey, n = last_day_ind_prey,method="linear")$y # interpolate prey 1 energy density
     Prey <- Prey[First_day:Last_day]
     globalout_Ind_Prey <- cbind(globalout_Ind_Prey,Prey)
-    Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
+    Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE,stringsAsFactors = FALSE)
   }
   
   colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
@@ -375,7 +375,7 @@ shinyServer(function(input, output,session) {
   ### Predator energy density 
   ########################################################################
   
-  Predator_E <- read.csv("Main Inputs/Pred_E.csv",head=TRUE,stringsAsFactors = FALSE) 
+  Predator_E <- read.csv(Predator_E_File,head=TRUE,stringsAsFactors = FALSE) 
   Day_pred <- Predator_E[,1] # Days
   Pred_E <- Predator_E[,2]  # Just use the predator energy values, which are in column 2
   last_day_pred <- tail(Day_pred, n = 1)  # get the total number of days + 1
@@ -405,7 +405,7 @@ shinyServer(function(input, output,session) {
   ### Mortality
   ########################################################################
   
-  Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE,stringsAsFactors = FALSE)
+  Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
   Day_mort <- Mortality[,1] # Days
   mort_types <- (ncol(Mortality))-1
   last_day_mort <- tail(Day_mort, n = 1)  # get the total number of days
@@ -416,7 +416,7 @@ shinyServer(function(input, output,session) {
     Mort <- approx(Day_mort,Mort, n = last_day_mort,method="constant")$y # interpolate mortality
     Mort <- Mort[First_day:Last_day]
     globalout_mort <- cbind(globalout_mort,Mort)
-    Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE,stringsAsFactors = FALSE)
+    Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
   }
 
 colnames(globalout_mort) <- names(Mortality)[-1]
@@ -465,7 +465,7 @@ globalout_individuals$day <- First_day:Last_day
 ### Reproduction
 ########################################################################
 
-Reproduction <- read.csv("Sub-Models/Reproduction/Reproduction.csv",head=TRUE,stringsAsFactors = FALSE)
+Reproduction <- read.csv(Reproduction_File,head=TRUE,stringsAsFactors = FALSE)
 Day <- Reproduction[,1] # Days
 Reproduction <- Reproduction[,2]  # Just use the Temp values, which are in column 2
 last_day <- tail(Day, n = 1)  # get the total number of days
@@ -579,11 +579,11 @@ Ew = 1/(1.85 + (155/Kow))  # gill chemical uptake efficiency (eq.6)
 Kbw = Fat.fr*Kow + ProAsh.fr*0.035*Kow + H2O.fr  # Arnot & Gobas (2004, eq. 3)
 
 # Concentrations in fish are micrograms/g, or parts per million
-Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE,stringsAsFactors = FALSE)
+Prey_conc <- read.csv(Prey_conc_File,head=TRUE,stringsAsFactors = FALSE)
 Day_conc <- Prey_conc[,1] # Days
-Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE,stringsAsFactors = FALSE)
+Prey_ass <- read.csv(Contam_assim_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Prey_ass <- Prey_ass[,1] # Days
-Trans_eff <- read.csv("Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv",head=TRUE,stringsAsFactors = FALSE)
+Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Trans_eff <- Trans_eff[,1] # Days
 prey_items <- (ncol(Prey_conc))-1
 last_day_conc <- tail(Day_conc, n = 1)  # get the total number of days
@@ -599,17 +599,17 @@ for(i in 1:prey_items){
   Prey_Conc <- approx(Day_conc,Prey_Conc, n = last_day_conc,method="linear")$y # interpolate prey 1 energy density
   Prey_Conc <- Prey_Conc[First_day:Last_day]
   globalout_Prey_Conc <- cbind(globalout_Prey_Conc,Prey_Conc)
-  Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE,stringsAsFactors = FALSE)
+  Prey_conc <- read.csv(Prey_conc_File,head=TRUE,stringsAsFactors = FALSE)
   Prey_ass <- Prey_ass[,i+1]  
   Prey_ass <- approx(Day_Prey_ass,Prey_ass, n = last_day_prey_ass,method="constant")$y # interpolate prey 1 energy density
   Prey_ass <- Prey_ass[First_day:Last_day]
   globalout_Prey_ass <- cbind(globalout_Prey_ass,Prey_ass)
-  Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE,stringsAsFactors = FALSE)
+  Prey_ass <- read.csv(Contam_assim_File,head=TRUE,stringsAsFactors = FALSE)
   Trans_eff <- Trans_eff[,i+1]  
   Trans_eff <- approx(Day_Trans_eff,Trans_eff, n = last_day_trans_eff,method="constant")$y # interpolate prey 1 energy density
   Trans_eff <- Trans_eff[First_day:Last_day]
   globalout_Trans_eff <- cbind(globalout_Trans_eff,Trans_eff)
-  Trans_eff <- read.csv("Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv",head=TRUE,stringsAsFactors = FALSE)
+  Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Prey_Conc) <- names(Prey_conc)[-1]
@@ -658,11 +658,11 @@ pred_cont_conc <- function(R.O2,C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,Ew,Kbw,CO
 ### Nutrient Regeneration
 ########################################################################
 
-Phos_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
+Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Ae <- Phos_Ae[,1] # Days
-Phos_Conc_Pred <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Pred.csv",head=TRUE,stringsAsFactors = FALSE)
+Phos_Conc_Pred <- read.csv(Phos_Conc_Pred_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Conc_Pred <- Phos_Conc_Pred[,1] # Days
-Phos_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
+Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Conc_Prey <- Phos_Conc_Prey[,1] # Days
 
 prey_items_nut <- (ncol(Phos_Ae))-1
@@ -680,11 +680,11 @@ Phos_Conc_Pred <- approx(Day_Phos_Conc_Pred,Phos_Conc_Pred, n = last_day_Phos_Co
 Phos_Conc_Pred <- Phos_Conc_Pred[First_day:Last_day]
 globalout_Phos_Conc_Pred <- cbind(globalout_Phos_Conc_Pred,Phos_Conc_Pred)
 
-Nit_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
+Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Ae <- Nit_Ae[,1] # Days
-Nit_Conc_Pred <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Pred.csv",head=TRUE,stringsAsFactors = FALSE)
+Nit_Conc_Pred <- read.csv(Nit_Conc_Pred_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Conc_Pred <- Nit_Conc_Pred[,1] # Days
-Nit_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
+Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Conc_Prey <- Nit_Conc_Prey[,1] # Days
 
 prey_items_nut <- (ncol(Nit_Ae))-1
@@ -707,25 +707,25 @@ for(i in 1:prey_items_nut){
   Phos_Ae <- approx(Day_Phos_Ae,Phos_Ae, n = last_day_Phos_Ae,method="linear")$y # interpolate prey 1 energy density
   Phos_Ae <- Phos_Ae[First_day:Last_day]
   globalout_Phos_Ae <- cbind(globalout_Phos_Ae,Phos_Ae)
-  Phos_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
+  Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE,stringsAsFactors = FALSE)
   
   Phos_Conc_Prey <- Phos_Conc_Prey[,i+1]  
   Phos_Conc_Prey <- approx(Day_Phos_Conc_Prey,Phos_Conc_Prey, n = last_day_Phos_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
   Phos_Conc_Prey <- Phos_Conc_Prey[First_day:Last_day]
   globalout_Phos_Conc_Prey <- cbind(globalout_Phos_Conc_Prey,Phos_Conc_Prey)
-  Phos_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
+  Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
   
   Nit_Ae <- Nit_Ae[,i+1]
   Nit_Ae <- approx(Day_Nit_Ae,Nit_Ae, n = last_day_Nit_Ae,method="linear")$y # interpolate prey 1 energy density
   Nit_Ae <- Nit_Ae[First_day:Last_day]
   globalout_Nit_Ae <- cbind(globalout_Nit_Ae,Nit_Ae)
-  Nit_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
+  Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE,stringsAsFactors = FALSE)
   
   Nit_Conc_Prey <- Nit_Conc_Prey[,i+1]  
   Nit_Conc_Prey <- approx(Day_Nit_Conc_Prey,Nit_Conc_Prey, n = last_day_Nit_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
   Nit_Conc_Prey <- Nit_Conc_Prey[First_day:Last_day]
   globalout_Nit_Conc_Prey <- cbind(globalout_Nit_Conc_Prey,Nit_Conc_Prey)
-  Nit_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
+  Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Phos_Ae) <- names(Phos_Ae)[-1]
@@ -1193,7 +1193,7 @@ output$temp <- renderPlot({
 output$diet_prop <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
   Last_day    <- input$FD             ### Last day of the simulation
-  Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE,stringsAsFactors = FALSE)
+  Diet_prop <- read.csv(Diet_prop_File,head=TRUE,stringsAsFactors = FALSE)
   Day_prey <- Diet_prop[,1] # Days
   prey_items <- (ncol(Diet_prop))-1
   last_day_prey <- tail(Day_prey, n = 1)  # get the total number of days
@@ -1203,7 +1203,7 @@ output$diet_prop <- renderPlot({
     Prey <- approx(Day_prey,Prey, n = last_day_prey,method="linear")$y # interpolate prey 1 energy density
     Prey <- Prey[First_day:Last_day]
     globalout_Prey <- cbind(globalout_Prey,Prey)
-    Diet_prop <- read.csv("Main Inputs/Diet_prop.csv",head=TRUE,stringsAsFactors = FALSE)
+    Diet_prop <- read.csv(Diet_prop_File,head=TRUE,stringsAsFactors = FALSE)
   }
   colnames(globalout_Prey) <- names(Diet_prop)[-1]
   plot(First_day:Last_day,globalout_Prey[,1],type="l",col=2,xlim=c(min(First_day),max(Last_day)),
@@ -1219,17 +1219,17 @@ output$diet_prop <- renderPlot({
 output$prey_ED <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
   Last_day    <- input$FD             ### Last day of the simulation
-  Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE,stringsAsFactors = FALSE)
+  Prey_E <- read.csv(Prey_E_File,head=TRUE,stringsAsFactors = FALSE)
   Day_Prey_E <- Prey_E[,1] # Days
   prey_items <- (ncol(Prey_E))-1
   last_day_prey_E <- tail(Day_Prey_E, n = 1)  # get the total number of days
   globalout_Prey_E <- NULL
   for(i in 1:prey_items){
     Prey_E <- Prey_E[,i+1]  
-    Prey_E <- approx(Day_Prey_E,Prey_E, n = last_day_prey_E,method="constant")$y # interpolate prey 1 energy density
+    Prey_E <- approx(Day_Prey_E,Prey_E, n = last_day_prey_E,method="linear")$y # interpolate prey 1 energy density
     Prey_E <- Prey_E[First_day:Last_day]
     globalout_Prey_E <- cbind(globalout_Prey_E,Prey_E)
-    Prey_E <- read.csv("Main Inputs/Prey_E.csv",head=TRUE,stringsAsFactors = FALSE)
+    Prey_E <- read.csv(Prey_E_File,head=TRUE,stringsAsFactors = FALSE)
   }
   colnames(globalout_Prey_E) <- names(Prey_E)[-1]
   plot(First_day:Last_day,globalout_Prey_E[,1],type="l",col=2,xlim=c(min(First_day),max(Last_day)),
@@ -1245,7 +1245,7 @@ output$prey_ED <- renderPlot({
 output$indigest_prey <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation
-Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
+Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE,stringsAsFactors = FALSE)
 Day_ind_prey <- Ind_prey[,1] # Days
 Ind_prey_items <- (ncol(Ind_prey))-1
 last_day_ind_prey <- tail(Day_ind_prey, n = 1)  # get the total number of days
@@ -1255,7 +1255,7 @@ for(i in 1:Ind_prey_items){
   Prey <- approx(Day_ind_prey,Prey, n = last_day_ind_prey,method="linear")$y # interpolate prey 1 energy density
   Prey <- Prey[First_day:Last_day]
   globalout_Ind_Prey <- cbind(globalout_Ind_Prey,Prey)
-  Ind_prey <- read.csv("Main Inputs/Indigestible_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
+  Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE,stringsAsFactors = FALSE)
 }
 colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
   plot(First_day:Last_day,globalout_Ind_Prey[,1],type="l",col=2,xlim=c(min(First_day),max(Last_day)),
@@ -1295,7 +1295,7 @@ output$pred_ED <- renderPlot({
   if(PREDEDEQ == 1) {  # Use Predator Energy Density values specified in the csv table; JEB
     First_day   <- input$ID             ### First day of the simulation
     Last_day    <- input$FD             ### Last day of the simulation  
-    Predator_E <- read.csv("Main Inputs/Pred_E.csv",head=TRUE,stringsAsFactors = FALSE) 
+    Predator_E <- read.csv(Predator_E_File,head=TRUE,stringsAsFactors = FALSE) 
     Day_pred <- Predator_E[,1] # Days
     Pred_E <- Predator_E[,2]  # Just use the predator energy values, which are in column 2
     last_day_pred <- tail(Day_pred, n = 1)  # get the total number of days + 1
@@ -1326,7 +1326,7 @@ output$pred_ED <- renderPlot({
 output$mort <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation    
-Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE,stringsAsFactors = FALSE)
+Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
 Day_mort <- Mortality[,1] # Days
 mort_types <- (ncol(Mortality))-1
 last_day_mort <- tail(Day_mort, n = 1)  # get the total number of days
@@ -1336,7 +1336,7 @@ for(i in 1:mort_types){
   Mort <- approx(Day_mort,Mort, n = last_day_mort,method="constant")$y # interpolate prey 1 energy density
   Mort <- Mort[First_day:Last_day]
   globalout_mort <- cbind(globalout_mort,Mort)
-  Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE,stringsAsFactors = FALSE)
+  Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
 }
 colnames(globalout_mort) <- names(Mortality)[-1]
 globalout_mort_prob <- NULL
@@ -1361,7 +1361,7 @@ globalout_mort <- cbind(First_day:Last_day,globalout_mort,globalout_mort_prob)
 output$pop <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation      
-Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE,stringsAsFactors = FALSE)
+Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
 Day_mort <- Mortality[,1] # Days
 mort_types <- (ncol(Mortality))-1
 last_day_mort <- tail(Day_mort, n = 1)  # get the total number of days
@@ -1372,7 +1372,7 @@ for(j in 1:mort_types){
   Mort <- approx(Day_mort,Mort, n = last_day_mort,method="constant")$y # interpolate mortality
   Mort <- Mort[First_day:Last_day]
   globalout_mort <- cbind(globalout_mort,Mort)
-  Mortality <- read.csv("Sub-Models/Mortality/Mortality.csv",head=TRUE,stringsAsFactors = FALSE)
+  Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_mort) <- names(Mortality)[-1]
@@ -1404,7 +1404,7 @@ for(i in 1:(days-1)){
   
 }
 
-Individuals <- Ind
+Individuals <- input$ind
 globalout_individuals <- NULL
 
 for(i in 1:(Last_day-First_day+1)){  
@@ -1423,7 +1423,7 @@ plot(globalout_individuals[,1],globalout_individuals[,2],type="l",xlab="Day",yla
 })
 
 output$repro <- renderPlot({
-  Reproduction <- read.csv("Sub-Models/Reproduction/Reproduction.csv",head=TRUE,stringsAsFactors = FALSE)
+  Reproduction <- read.csv(Reproduction_File,head=TRUE,stringsAsFactors = FALSE)
   First_day   <- input$ID             ### First day of the simulation
   Last_day    <- input$FD             ### Last day of the simulation   
   Day <- Reproduction[,1] # Days
@@ -1439,7 +1439,7 @@ output$repro <- renderPlot({
 output$cont_ae <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation     
-Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE,stringsAsFactors = FALSE)
+Prey_ass <- read.csv(Contam_assim_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Prey_ass <- Prey_ass[,1] # Days
 prey_items <- (ncol(Prey_ass))-1
 last_day_prey_ass <- tail(Day_Prey_ass, n = 1)  # get the total number of days
@@ -1450,7 +1450,7 @@ for(i in 1:prey_items){
   Prey_ass <- approx(Day_Prey_ass,Prey_ass, n = last_day_prey_ass,method="constant")$y # interpolate prey 1 energy density
   Prey_ass <- Prey_ass[First_day:Last_day]
   globalout_Prey_ass <- cbind(globalout_Prey_ass,Prey_ass)
-  Prey_ass <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv",head=TRUE,stringsAsFactors = FALSE)
+  Prey_ass <- read.csv(Contam_assim_File,head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Prey_ass) <- names(Prey_ass)[-1]
@@ -1469,7 +1469,7 @@ legend("topleft",col=2:(prey_items+1),lty=1,legend=colnames(globalout_Prey_ass),
 output$prey_cont_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation       
-Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE,stringsAsFactors = FALSE)
+Prey_conc <- read.csv(Prey_conc_File,head=TRUE,stringsAsFactors = FALSE)
 Day_conc <- Prey_conc[,1] # Days
 prey_items <- (ncol(Prey_conc))-1
 last_day_conc <- tail(Day_conc, n = 1)  # get the total number of days
@@ -1481,7 +1481,7 @@ for(i in 1:prey_items){
   Prey_Conc <- approx(Day_conc,Prey_Conc, n = last_day_conc,method="linear")$y # interpolate prey 1 energy density
   Prey_Conc <- Prey_Conc[First_day:Last_day]
   globalout_Prey_Conc <- cbind(globalout_Prey_Conc,Prey_Conc)
-  Prey_conc <- read.csv("Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv",head=TRUE,stringsAsFactors = FALSE)
+  Prey_conc <- read.csv(Prey_conc_File,head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Prey_Conc) <- names(Prey_conc)[-1]
@@ -1499,7 +1499,7 @@ colnames(globalout_Prey_Conc) <- names(Prey_conc)[-1]
 output$trans_eff <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
   Last_day    <- input$FD             ### Last day of the simulation      
-  Trans_eff <- read.csv("Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv",head=TRUE,stringsAsFactors = FALSE)
+  Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE,stringsAsFactors = FALSE)
   Day_Trans_eff <- Trans_eff[,1] # Days
   prey_items <- (ncol(Trans_eff))-1
   last_day_trans_eff <- tail(Day_Trans_eff, n=1)
@@ -1511,7 +1511,7 @@ output$trans_eff <- renderPlot({
     Trans_eff <- approx(Day_Trans_eff,Trans_eff, n = last_day_trans_eff,method="constant")$y # interpolate prey 1 energy density
     Trans_eff <- Trans_eff[First_day:Last_day]
     globalout_Trans_eff <- cbind(globalout_Trans_eff,Trans_eff)
-    Trans_eff <- read.csv("Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv",head=TRUE,stringsAsFactors = FALSE)
+    Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE,stringsAsFactors = FALSE)
   }
   colnames(globalout_Trans_eff) <- names(Trans_eff)[-1]
   
@@ -1528,7 +1528,7 @@ output$trans_eff <- renderPlot({
 output$phos_ae <- renderPlot({ 
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation     
-Phos_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
+Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Ae <- Phos_Ae[,1] # Days
 prey_items_nut <- (ncol(Phos_Ae))-1
 last_day_Phos_Ae <- tail(Day_Phos_Ae, n = 1)  # get the total number of days
@@ -1539,7 +1539,7 @@ for(i in 1:prey_items_nut){
   Phos_Ae <- approx(Day_Phos_Ae,Phos_Ae, n = last_day_Phos_Ae,method="linear")$y # interpolate prey 1 energy density
   Phos_Ae <- Phos_Ae[First_day:Last_day]
   globalout_Phos_Ae <- cbind(globalout_Phos_Ae,Phos_Ae)
-  Phos_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
+  Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Phos_Ae) <- names(Phos_Ae)[-1]
@@ -1557,7 +1557,7 @@ colnames(globalout_Phos_Ae) <- names(Phos_Ae)[-1]
 output$pred_phos_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation       
-Phos_Conc_Pred <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Pred.csv",head=TRUE,stringsAsFactors = FALSE)
+Phos_Conc_Pred <- read.csv(Phos_Conc_Pred_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Conc_Pred <- Phos_Conc_Pred[,1] # Days
 last_day_Phos_Conc_Pred <- tail(Day_Phos_Conc_Pred, n = 1)  # get the total number of days
 globalout_Phos_Conc_Pred <- NULL
@@ -1574,7 +1574,7 @@ colnames(globalout_Phos_Conc_Pred) <- names(Phos_Conc_Pred)[-1]
 output$prey_phos_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation       
-Phos_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
+Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Conc_Prey <- Phos_Conc_Prey[,1] # Days
 prey_items_nut <- (ncol(Phos_Conc_Prey))-1
 last_day_Phos_Conc_Prey <- tail(Day_Phos_Conc_Prey, n = 1)  # get the total number of days
@@ -1585,7 +1585,7 @@ for(i in 1:prey_items_nut){
   Phos_Conc_Prey <- approx(Day_Phos_Conc_Prey,Phos_Conc_Prey, n = last_day_Phos_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
   Phos_Conc_Prey <- Phos_Conc_Prey[First_day:Last_day]
   globalout_Phos_Conc_Prey <- cbind(globalout_Phos_Conc_Prey,Phos_Conc_Prey)
-  Phos_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
+  Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Phos_Conc_Prey) <- names(Phos_Conc_Prey)[-1]
@@ -1603,7 +1603,7 @@ colnames(globalout_Phos_Conc_Prey) <- names(Phos_Conc_Prey)[-1]
 output$nit_ae <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation     
-Nit_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
+Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Ae <- Nit_Ae[,1] # Days
 prey_items_nut <- (ncol(Nit_Ae))-1
 last_day_Nit_Ae <- tail(Day_Nit_Ae, n = 1)  # get the total number of days
@@ -1614,7 +1614,7 @@ for(i in 1:prey_items_nut){
   Nit_Ae <- approx(Day_Nit_Ae,Nit_Ae, n = last_day_Nit_Ae,method="linear")$y # interpolate prey 1 energy density
   Nit_Ae <- Nit_Ae[First_day:Last_day]
   globalout_Nit_Ae <- cbind(globalout_Nit_Ae,Nit_Ae)
-  Nit_Ae <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Ae.csv",head=TRUE,stringsAsFactors = FALSE)
+  Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Nit_Ae) <- names(Nit_Ae)[-1]
@@ -1632,7 +1632,7 @@ colnames(globalout_Nit_Ae) <- names(Nit_Ae)[-1]
 output$pred_nit_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation    
-Nit_Conc_Pred <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Pred.csv",head=TRUE,stringsAsFactors = FALSE)
+Nit_Conc_Pred <- read.csv(Nit_Conc_Pred_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Conc_Pred <- Nit_Conc_Pred[,1] # Days
 last_day_Nit_Conc_Pred <- tail(Day_Nit_Conc_Pred, n = 1)  # get the total number of days
 globalout_Nit_Conc_Pred <- NULL
@@ -1649,7 +1649,7 @@ colnames(globalout_Nit_Conc_Pred) <- names(Nit_Conc_Pred)[-1]
 output$prey_nit_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation      
-Nit_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
+Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Conc_Prey <- Nit_Conc_Prey[,1] # Days
 prey_items_nut <- (ncol(Nit_Conc_Prey))-1
 last_day_Nit_Conc_Prey <- tail(Day_Nit_Conc_Prey, n = 1)  # get the total number of days
@@ -1660,7 +1660,7 @@ for(i in 1:prey_items_nut){
   Nit_Conc_Prey <- approx(Day_Nit_Conc_Prey,Nit_Conc_Prey, n = last_day_Nit_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
   Nit_Conc_Prey <- Nit_Conc_Prey[First_day:Last_day]
   globalout_Nit_Conc_Prey <- cbind(globalout_Nit_Conc_Prey,Nit_Conc_Prey)
-  Nit_Conc_Prey <- read.csv("Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv",head=TRUE,stringsAsFactors = FALSE)
+  Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
 }
 
 colnames(globalout_Nit_Conc_Prey) <- names(Nit_Conc_Prey)[-1]
