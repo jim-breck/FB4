@@ -1,44 +1,44 @@
 require(shiny)
-parms <- read.csv("Parameters_official.csv") #  Read parameter values from .csv file
-Diet_prop <- read.csv("Main inputs/Diet_prop.csv",head=TRUE)
+parms <- read.csv("Parameters_official.csv") ###  Read parameter values from .csv file
+Diet_prop <- read.csv("Main inputs/Diet_prop.csv",head=TRUE) ### Detects number of prey types
 
-choicesSpecies <- setNames(1:nrow(parms),parms$Species)
+choicesSpecies <- setNames(1:nrow(parms),parms$Species) ### Allows the consumption output to be broken down by species for individual fish
 choicePreyJoules <- names(Diet_prop[,-1])
 choicePreyJoules <- paste(choicePreyJoules,"Joules", sep = " ")
 choicePreyGrams <- names(Diet_prop[,-1])
 choicePreyGrams <- paste(choicePreyGrams,"Grams", sep = " ")
 
-choicePreyPopJoules <- names(Diet_prop[,-1])
+choicePreyPopJoules <- names(Diet_prop[,-1]) ### Allows the consumption output to be broken down by species for the population
 choicePreyPopJoules <- paste(choicePreyPopJoules,"pop.Joules", sep = " ")
 choicePreyPopGrams <- names(Diet_prop[,-1])
 choicePreyPopGrams <- paste(choicePreyPopGrams,"pop.Grams", sep = " ")
 
-shinyUI(navbarPage("Fish Bioenergetics 4.0",           
-  tabPanel("Initial Settings", 
+shinyUI(navbarPage("Fish Bioenergetics 4.0",            
+  tabPanel("Initial Settings", ### Initial Settings tab
            sidebarLayout(
              sidebarPanel(
-      selectInput("spec", 
+      selectInput("spec",  ### Species selection
                   label = "Species",
                   choices = c("",choicesSpecies),
                   selected = NULL),
       
-      numericInput("ID",
+      numericInput("ID", ### Intial day input
                    label = "Initial Day",
                    value = NA),
       
-      numericInput("FD",
+      numericInput("FD", ### Final day input
                    label = "Final Day",
                    value = NA),
       
-      numericInput("InW", 
+      numericInput("InW", ### Intial weight input
                    label = "Initial Weight (g)", 
                    value = NA),
       
-      numericInput("oxycal", 
+      numericInput("oxycal", ### Oxycalorific Coefficient default value
                    label = "Oxycalorific Coefficient (J/g O2)", 
                    value = 13560),
            
-      radioButtons("fitto", 
+      radioButtons("fitto", ### Fitting options
                    label = h4("Fit to:"), 
                    choices = list("Final Weight (g of wet predator body weight)" = "Weight",
                                   "Consumption (g of total prey wet weight)" = "Consumption",
@@ -47,7 +47,7 @@ shinyUI(navbarPage("Fish Bioenergetics 4.0",
                                   "p-value (proportion of Cmax)"="p-value"),                                 
                    selected = NA),
  
-      numericInput("FinW", 
+      numericInput("FinW", ### Creates a box for the fitting value, which is dependent on the selection made above
                    label = NA, 
                    value = NA)
       
@@ -56,59 +56,59 @@ mainPanel(tableOutput("parameters"))
 
 )),
   
-  tabPanel("Input Files",
+  tabPanel("Input Files", ### Input files tab
   tabsetPanel(
-  tabPanel("Temperature",plotOutput("temp")),  
-  tabPanel("Diet Proportions", plotOutput("diet_prop")),
-  tabPanel("Prey Energy Density",plotOutput("prey_ED")),
-  tabPanel("Predator Energy Density",plotOutput("pred_ED")),
-  tabPanel("Indigestible Prey",plotOutput("indigest_prey"))
+  tabPanel("Temperature",plotOutput("temp")), ### Temperature tab 
+  tabPanel("Diet Proportions", plotOutput("diet_prop")), ### Diet proportions tab 
+  tabPanel("Prey Energy Density",plotOutput("prey_ED")), ### Prey energy density tab
+  tabPanel("Predator Energy Density",plotOutput("pred_ED")), ### Predator energy density tab
+  tabPanel("Indigestible Prey",plotOutput("indigest_prey")) ### Indigestible prey tab
   )
 ),    
-  navbarMenu("Sub-Models",
-  tabPanel("Population",
+  navbarMenu("Sub-Models", ### Sub-Models tab
+  tabPanel("Population", ### Population section
            sidebarLayout(
              sidebarPanel(
-           checkboxInput("pop_mort", 
+           checkboxInput("pop_mort", ### Checkbox to decide if population mortality should be accounted for
                          label = h4("Mortality"), 
                          value = FALSE),
            
-           numericInput("ind",
+           numericInput("ind", ### Number of individuals in the population; default is 1
                         label = "Initial Population Size",
                         value = 1)),
            mainPanel(
-             plotOutput("mort"),
-             plotOutput("pop")
+             plotOutput("mort"), ### plot output for mortality probabilities
+             plotOutput("pop") ### plot output for the number of individuals in the population
            )
            )
            ),
-  tabPanel("Reproduction",
+  tabPanel("Reproduction", ### Reproduction section
            sidebarLayout(
              sidebarPanel(
-           checkboxInput("spawn", 
+           checkboxInput("spawn", ### Checkbox to decide if spawning should be accounted for
                         label = h4("Spawning"), 
                         value = FALSE)),
            mainPanel(
-             plotOutput("repro")
+             plotOutput("repro") ### plot output for spawning events
            )
            )
            ),
              
-  tabPanel("Nutrient Regeneration",
+  tabPanel("Nutrient Regeneration", ### Nutrient regeneration section
            sidebarLayout(
              sidebarPanel(
-           checkboxInput("nut", 
+           checkboxInput("nut", ### Checkbox to decide if nutrient regeneration should be accounted for
                          label = h4("Nutrient Regeneration"), 
                          value = FALSE)
            ),
            mainPanel(
              tabsetPanel(
-               tabPanel("Phosphorous Assimilation Efficiency",plotOutput("phos_ae")),
-               tabPanel("Prey Phosphorous Concentration",plotOutput("prey_phos_conc")),
-               tabPanel("Predator Phosphorous Concentration",plotOutput("pred_phos_conc")),
-               tabPanel("Nitrogen Assimilation Efficiency",plotOutput("nit_ae")),
-               tabPanel("Prey Nitrogen Concentration",plotOutput("prey_nit_conc")),
-               tabPanel("Predator Nitrogen Concentration",plotOutput("pred_nit_conc"))
+               tabPanel("Phosphorous Assimilation Efficiency",plotOutput("phos_ae")), ### plot for Phosphorous assimilation efficiency
+               tabPanel("Prey Phosphorous Concentration",plotOutput("prey_phos_conc")), ### plot for Prey Phosphorous Concentration
+               tabPanel("Predator Phosphorous Concentration",plotOutput("pred_phos_conc")), ### plot for Predator Phosphorous Concentration
+               tabPanel("Nitrogen Assimilation Efficiency",plotOutput("nit_ae")), ### plot for Nitrogen Assimilation Efficiency
+               tabPanel("Prey Nitrogen Concentration",plotOutput("prey_nit_conc")), ### plot for Prey Nitrogen Concentration
+               tabPanel("Predator Nitrogen Concentration",plotOutput("pred_nit_conc")) ### plot for Predator Nitrogen Concentration
              )
            )
            )
@@ -117,42 +117,40 @@ mainPanel(tableOutput("parameters"))
   tabPanel("Contaminant Accumulation",
            sidebarLayout(
              sidebarPanel(
-           checkboxInput("contaminant", 
+           checkboxInput("contaminant", ### Checkbox to decide if population mortality should be accounted for
                          label = h4("Contaminant Accumulation"), 
                          value = FALSE),
-           radioButtons("cont_acc", 
+           radioButtons("cont_acc", ### Radio buttons to decide on which contaminant accumulation to use
                         label = "Contaminant Analysis Model", 
                         choices = list("Net Assimilation Efficiency (Model 1)" = 1,
                                        "Gross Assimilation Efficiency + Temperature- and Size-Dependent Depuration (Model 2)" = 2),
-                        selected = 1),
-#            fileInput("cont_conc_prey", label = "Contaminant Concentration in Prey Items"),
-#            fileInput("cont_ass", label = "Contaminant Assimilation Efficiencies in Prey Items"),
+                        selected = 1), ### Numeric input for the initial predator contaminant concentration
            numericInput("init_pred_conc",
                         label = "Initial Predator Concentration (ppm)",
                         value = NA)
 ),
 mainPanel(
   tabsetPanel(
-    tabPanel("Contaminant Assimilation Efficiency",plotOutput("cont_ae")),
-    tabPanel("Prey Contaminant Concentration",plotOutput("prey_cont_conc")),
-    tabPanel("Contaminant Transfer Efficiency",plotOutput("trans_eff"))
+    tabPanel("Contaminant Assimilation Efficiency",plotOutput("cont_ae")), ### plot for Contaminant assimilation efficiency
+    tabPanel("Prey Contaminant Concentration",plotOutput("prey_cont_conc")), ### plot prey contaminant concentration
+    tabPanel("Contaminant Transfer Efficiency",plotOutput("trans_eff")) ### plot contaminant transfer efficiency
   )
 )
 )
 )),
   
-tabPanel("Output",     
+tabPanel("Output", ### Output tab    
            sidebarLayout(
           sidebarPanel(   
             
-      h3("Table Output"), 
+      h3("Table Output"), ### Table output tab
       
-      numericInput("int", 
+      numericInput("int", ### Nemeric input for the duration of the time intervals
                    label = "Interval (days)", 
                    value = 1),
       
       selectizeInput(
-        "var1", "Individual Variables (click in box for options)", choices = list("Day"="Day", 
+        "var1", "Individual Variables (click in box for options)", choices = list("Day"="Day", ### Variables by individuals
                                            "Temperature"="Temperature",
                                            "Weight (g)"="Weight",
                                            "Net Production (g)"="Net.Production.Grams",
@@ -186,7 +184,7 @@ tabPanel("Output",
       
       selectizeInput(
         "var2", "Population Variables", choices = list(
-                                                                      "Population Number"="Population.Number",
+                                                                      "Population Number"="Population.Number", ### Variables by population
                                                                       "Population Biomass (g)"="Population.Biomass",
                                                                       "Consumption by Population (g)"="Prey.Tot.Pop.Grams",
                                                                       "Consumption by Population (J)"="Prey.Tot.Pop.Joules",
@@ -200,7 +198,7 @@ tabPanel("Output",
       
       selectizeInput(
         "var3", "Nutrient Regeneration Variables", choices = list( 
-                                                                      "Nitrogen Egestion (g)"="Nitrogen.Egestion",
+                                                                      "Nitrogen Egestion (g)"="Nitrogen.Egestion", ### Nutrient regeneration variables 
                                                                       "Phosphorous Egestion (g)"="Phosphorous.Egestion",
                                                                       "N:P Egestion (mass ratio)"="N.to.P.Egestion",
                                                                       "Nitrogen Excretion (g)"="Nitrogen.Excretion",
@@ -216,17 +214,17 @@ tabPanel("Output",
       
       selectizeInput(
         "var4", "Contaminant Analysis Variables", choices = list(
-                                                                      "Clearance Rate (/d)"="Clearance.Rate",
+                                                                      "Clearance Rate (/d)"="Clearance.Rate", ### Contaminant analysis variables
                                                                       "Contaminant Uptake (ug/d)"="Contaminant.Uptake",
                                                                       "Contaminant Burden (ug)"="Contaminant.Burden",
                                                                       "Contaminant Predator Concentration (ppm)"="Contaminant.Predator.Concentration"),
         multiple = TRUE,selected = c()),
 
-      div(style="height: 40px;",downloadButton('downloadData', 'Download Table')),
+      div(style="height: 40px;",downloadButton('downloadData', 'Download Table')), ### Button that allows to download the tabulated output
       
-      h3("Plot Output"),
+      h3("Plot Output"), ### Plot output 
       
-      selectInput("xaxis", 
+      selectInput("xaxis", ### x-axis variables for plot output
                   label = "X Axis",
                   choices = list("Day"="Day", 
                                  "Temperature"="Temperature",
@@ -282,7 +280,7 @@ tabPanel("Output",
                                  "Contaminant Predator Concentration (ppm)"="Contaminant.Predator.Concentration"),
                   selected = "Day", multiple=FALSE),
  
-      selectInput("yaxis", 
+      selectInput("yaxis", ### 1st y-axis variables for plot output
                   label = "Y Axis",
                   choices = list("Day"="Day", 
                                  "Temperature"="Temperature",
@@ -338,7 +336,7 @@ tabPanel("Output",
                                  "Contaminant Predator Concentration (ppm)"="Contaminant.Predator.Concentration"),
                   selected = "Temperature", multiple=FALSE),
  
-      selectInput("yaxis2", 
+      selectInput("yaxis2", ### 2nd y-axis variables for plot output
                   label = "Y Axis 2",
                   choices = list("Day"="Day", 
                                  "Temperature"="Temperature",
@@ -398,7 +396,6 @@ tabPanel("Output",
       mainPanel(
         tabsetPanel(
           tabPanel("Table",tableOutput("table")),
-          #tabPanel("Table by Prey",tableOutput("tableprey")),
           tabPanel("Plot", plotOutput("plot")),
           tabPanel("Summary",tableOutput("summary"))
 
@@ -407,5 +404,5 @@ tabPanel("Output",
 )
 ), 
  tabPanel(
-   img(src = "FB4.png", height = 50, width = 40))
+   img(src = "FB4.jpg", height = 40, width = 40)) ### FB4 logo
 ))
