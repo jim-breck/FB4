@@ -1,6 +1,6 @@
 ﻿## Welcome to Fish Bioenergetics 4.0
 
-__New version coming soon!__ Version 1.0.0 of the FB4 software will be available in the next few days. The new software and an update of the User Manual should be available during the week of November 13, 2017. When the update is available, you will be able to click a button on this web page to download the software and User Manual as a zipped file.  Coming soon!
+We are today (12/1/2017) releasing Version 1.0.0 of the FB4 software! This release includes the new software and the FB4 User Manual. You can click a button on this web page to download the software and User Manual as a zipped file. Instructions for getting started are in the User Manual, and also summarized below.
 
 The Open Access article by [Deslauriers et al. (2017)](http://dx.doi.org/10.1080/03632415.2017.1377558) gives an introduction to this R-based modeling application.
 
@@ -20,16 +20,18 @@ We hope to add information such as the following:
 ### Instructions
 #### Steps to download, install and run Fish Bioenergetics 4.0
 
-The application uses __R__ as a computing language and __RStudio__ as the supporting interface. You will need both of these programs in order to be able to run Fish Bioenergetics 4.0 on your computer.
+Fish Bioenergetics 4.0 (FB4) uses __R__ as a computing language and __Shiny__ through __RStudio__ as the supporting interface. You will need both of these programs in order to be able to run FB4 on your computer.
 
 - Go to http://cran.r-project.org and download the latest version of R that is compatible with your computer (Windows or Mac).
-- Go to http://www.rstudio.com/products/rstudio/download/ and download the latest version of RStudio under "Installers for supported platforms" that is compatible with your computer (Windows or Mac).
-- Once both programs have been installed, save the Fish Bioenergetics 4.0 (FB4) folder from this website onto your desktop.
-- In RStudio, select __File -> Open File...__ and double click on the "server.R" file found in the FB4 folder on your desktop.
-- In RStudio, go to __Session -> Set Working Directory -> Choose Directory...__ and select the __FB4__ folder you just saved on your desktop. Once the folder has been selected, press the select (in Windows) or open (in Mac) tab.
-- You will now need to download the "shiny" package, which will allow you to run the application. To do so, go to __Tools -> Install Packages...__ and type __shiny__ under __Packages (separate multiple with space or comma)__. Then, click on __Install__. This might take 1-2 minutes.
-- You are now all set to run the application. To do so, select the __Run App__ tab found in the upper right corner of the script window. Note: In some versions of RStudio, the __Run App__ tab does not appear. In that case, type __runApp()__ in the __Console__ window (lower left window) and insert the FB4 folder path inside the parentheses. The folder path should be inside brackets and should look something like: runApp("/Users/david/Desktop/FB4") Once done, press __Enter__ and the application should run.
-- __Warning__: Any alteration to the __R__ script will result in the application to either be modified or not function. If you inadvertently modify the code, just make sure you do not save the server.R or ui.R files before closing and re-opening them again.
+- Go to http://www.rstudio.com/products/rstudio/download/, click on the button to download the free RStudio Desktop version, then download the latest version of RStudio under "Installers for supported platforms" that is compatible with your computer (Windows or Mac) operating system.
+- Once both programs have been installed, save the FB4 folder downloaded from this website onto your desktop (or another suitable location).
+- In RStudio, select __File -> Open File...__ and double click on the "server.R" file found in the FB4 folder on your desktop. This step only needs to be repeated if the server.R file has been modified or a different one is used, or if a different FB4 folder is used.
+- In RStudio, go to __Session -> Set Working Directory -> Choose Directory...__ and select the __FB4__ folder you just saved. Once the folder has been selected, press the select (in Windows) or open (in Mac) tab. This step only needs to be performed once if the same FB4 folder is continually used. However, this step will have to be repeated if a different FB4 folder is created.
+- You will now need to download the "Shiny" package, which will allow you to run the application. To do so, go to __Tools -> Install Packages...__ and type __Shiny__ under __Packages (separate multiple with space or comma)__. Then, click on __Install__. This might take 1-2 minutes.
+- You are now all set to run the application. To do so, press the down-arrow icon to the right of the __Run App__ tab found in the upper right corner of the script window (upper left window) and select __Run External__. Once this is done, press the __Run App__ tab and FB4 will start in a new window of your browser.
+
+Note: In some versions of RStudio, the __Run App__ tab does not appear. In that case, type __runApp()__ in the __Console__ window (lower left window) and insert the FB4 folder path inside the parentheses. The folder path should be inside quotation marks and should look something like: runApp("/Users/david/Desktop/Fish Bioen 4.0") Once done, press __Enter__ and the application should run.
+- __Warning__: Any alteration to the __R__ script will cause the application to either be modified or not function. If you inadvertently modify the code, just make sure you do not save the __server.R__ or __ui.R__ files before closing and re-opening them again (or save them under a different name).
 
 A similar set of instructions for getting started is in the FB Wiki: [FB Wiki](https://github.com/jim-breck/FB4/wiki)
 
@@ -72,7 +74,11 @@ Input data files contain information that might have been collected in the field
 
 * Main Inputs
 
-The Main Input files include: __Temperature__, __Prey Energy Density__ (__Prey_E__), __Prey Proportions__ (__Diet_prop__), __Predator Energy Density__ (__Pred_E__), and in some instance, __Indigestible Prey__ (only if using Equation 3 for waste losses; see Stewart et al. 1983). All files are saved in .csv format. Default files have been provided with the Fish Bioen 4.0 folder but these can be modified to reflect your own data. To do so, simply replace the days and input data with your own data and save the .csv file before launching FB4. Data are linearly interpolated for the days where the data are missing. You must always have the same number of prey items for each of the input files (except __Predator Energy Density__) you plan on using for the simulations.
+The Main Input files include: __Temperature__, __Prey Energy Density__ (__Prey_E__), __Prey Proportions__ (__Diet_prop__), __Predator Energy Density__ (__Pred_E__), and __Indigestible Prey__ (only if using Equation 3 for waste losses; see Stewart et al. 1983). All files are saved in .csv format. Default files have been provided with the Fish Bioen 4.0 folder but these can be modified to reflect your own data. To do so, simply replace the days and input data with your own data and save the .csv file before launching FB4. Data are linearly interpolated for the days where the data are missing. You must always have the same number of prey items for each of the input files (except __Predator Energy Density__) that you plan on using for the simulations.
+
+The mortalify file is the one case where daily values are __not__ interpolated. The value specified for one day remains in effect until a different value is specified (see User Manual for details).
+
+__Note__: All input files __must__ start on day 1. Failure to do so will result in FB4 using the wrong set of days for the simulation. 
 
 * Input Files
 
