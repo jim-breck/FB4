@@ -1,2 +1,4 @@
 theme: jekyll-theme-cayman
 # show_downloads: true
+# Google Analytics
+google_analytics: UA-110115278-1
