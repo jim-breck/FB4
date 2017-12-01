@@ -61,13 +61,14 @@ shinyServer(function(input, output,session) {
   Oxycal <- input$oxycal              ### Oxycalorific coefficient
   
   calc.nut <- input$nut               ### Do nutrient calcs? (TRUE/FALSE)
+  # calc.nut is used to avoid reading the six nutrient files if not used
 
   calc.contaminant <- input$contaminant  ### Do contaminant calcs? (TRUE/FALSE)
+  # calc.contaminant is used to avoid reading the three contaminant files if not used
 
-  # Default Input files:
-  #    Main Input files
-  # Temperature_File = "Main Inputs/Temperature.csv" # Temperature (deg C), over time
-  
+  # Could add flag calc.mortality to use to avoid reading Mortality_File if not used
+  # Could add flag calc.PRED_E to use to avoid reading Predator_E_File unless PREDEDEQ == 1
+  # Could add flag calc.reproduction to use to avoid reading Reproduction_File if not used
     
   ########################################################################
   ### Consumption parameters 
@@ -347,6 +348,7 @@ shinyServer(function(input, output,session) {
   
   colnames(globalout_Prey) <- names(Diet_prop)[-1]
   colnames(globalout_Prey_E) <- names(Prey_E)[-1]
+  # end of diet proportions and energetical contributions section
   
   ########################################################################  
   ### Indigestible Prey 
@@ -370,6 +372,7 @@ shinyServer(function(input, output,session) {
   }
   
   colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
+  # end of indigestible prey section
   
   ########################################################################  
   ### Predator energy density 
@@ -390,16 +393,17 @@ shinyServer(function(input, output,session) {
   Pred_E <- c(Pred_E,last_Pred_E)
   Pred_E <- Pred_E[First_day:(Last_day+1)]  ## added by JEB
   
-  pred_En_D <- function(W,day,PREDEDEQ) {
-    if(PREDEDEQ == 1) {return(Pred_E[day])   
-    } else if(PREDEDEQ == 3) {return(alpha1*W^beta1)  
-    } else if(PREDEDEQ == 2) {
-      if(W <as.numeric(cutoff)) {return((as.numeric(alpha1) + as.numeric(beta1)*W))}
-      if(W>=as.numeric(cutoff)) {return((as.numeric(alpha2) + as.numeric(beta2)*W))} 
-      if(W <as.numeric(cutoff) && as.numeric(beta1) == 0) {return((as.numeric(alpha1)))}  
-      if(W>=as.numeric(cutoff) && as.numeric(beta2) == 0) {return((as.numeric(alpha2)))}
-    }  # restructured to minimize if-tests; JEB
-  }
+  pred_En_D <- function(W,day,PREDEDEQ) {    # Find Energy Density (ED, J/g) for this day and W
+    if(PREDEDEQ == 1) {return(Pred_E[day])   # Use daily interpolated values from csv file; ignore weight
+    } else if(PREDEDEQ == 3) {return(alpha1*W^beta1)  # ED is power function of weight; ignore day
+    } else if(PREDEDEQ == 2) {  # Using two line segments, ED is linear function of weight; ignore day
+      Wco = as.numeric(cutoff)  # Wco is weight at cutoff, where the line breaks
+      if(W <Wco) {return((as.numeric(alpha1) + as.numeric(beta1)*W))}
+      if(W>=Wco) {return((as.numeric(alpha2) + as.numeric(beta2)*W))} 
+      if(W <Wco && as.numeric(beta1) == 0) {return((as.numeric(alpha1)))}  
+      if(W>=Wco && as.numeric(beta2) == 0) {return((as.numeric(alpha2)))}
+    }  # restructured using "else if" to reduce if-tests; JEB
+  }  # end of predator energy density section
    
   ########################################################################
   ### Mortality
@@ -460,6 +464,7 @@ globalout_individuals <- rbind(globalout_individuals,data.frame(day=i,
 
 }
 globalout_individuals$day <- First_day:Last_day
+# end of mortality section
 
 ########################################################################
 ### Reproduction
@@ -578,43 +583,46 @@ Ew = 1/(1.85 + (155/Kow))  # gill chemical uptake efficiency (eq.6)
 # Kbw is the fish:water partition coeff
 Kbw = Fat.fr*Kow + ProAsh.fr*0.035*Kow + H2O.fr  # Arnot & Gobas (2004, eq. 3)
 
-# Concentrations in fish are micrograms/g, or parts per million
-Prey_conc <- read.csv(Prey_conc_File,head=TRUE,stringsAsFactors = FALSE)
-Day_conc <- Prey_conc[,1] # Days
-Prey_ass <- read.csv(Contam_assim_File,head=TRUE,stringsAsFactors = FALSE)
-Day_Prey_ass <- Prey_ass[,1] # Days
-Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE,stringsAsFactors = FALSE)
-Day_Trans_eff <- Trans_eff[,1] # Days
-prey_items <- (ncol(Prey_conc))-1
-last_day_conc <- tail(Day_conc, n = 1)  # get the total number of days
-last_day_prey_ass <- tail(Day_Prey_ass, n = 1)  # get the total number of days
-last_day_trans_eff <- tail(Day_Trans_eff, n=1)
-
 globalout_Prey_Conc <- NULL
 globalout_Prey_ass <- NULL
 globalout_Trans_eff <-NULL
 
-for(i in 1:prey_items){
-  Prey_Conc <- Prey_conc[,i+1]
-  Prey_Conc <- approx(Day_conc,Prey_Conc, n = last_day_conc,method="linear")$y # interpolate prey 1 energy density
-  Prey_Conc <- Prey_Conc[First_day:Last_day]
-  globalout_Prey_Conc <- cbind(globalout_Prey_Conc,Prey_Conc)
+if(calc.contaminant==TRUE){
+  # only read these contaminant files if calc.contaminant==TRUE
+  # Concentrations in fish are micrograms/g, or parts per million
   Prey_conc <- read.csv(Prey_conc_File,head=TRUE,stringsAsFactors = FALSE)
-  Prey_ass <- Prey_ass[,i+1]  
-  Prey_ass <- approx(Day_Prey_ass,Prey_ass, n = last_day_prey_ass,method="constant")$y # interpolate prey 1 energy density
-  Prey_ass <- Prey_ass[First_day:Last_day]
-  globalout_Prey_ass <- cbind(globalout_Prey_ass,Prey_ass)
+  Day_conc <- Prey_conc[,1] # Days
   Prey_ass <- read.csv(Contam_assim_File,head=TRUE,stringsAsFactors = FALSE)
-  Trans_eff <- Trans_eff[,i+1]  
-  Trans_eff <- approx(Day_Trans_eff,Trans_eff, n = last_day_trans_eff,method="constant")$y # interpolate prey 1 energy density
-  Trans_eff <- Trans_eff[First_day:Last_day]
-  globalout_Trans_eff <- cbind(globalout_Trans_eff,Trans_eff)
+  Day_Prey_ass <- Prey_ass[,1] # Days
   Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE,stringsAsFactors = FALSE)
-}
+  Day_Trans_eff <- Trans_eff[,1] # Days
+  prey_items <- (ncol(Prey_conc))-1
+  last_day_conc <- tail(Day_conc, n = 1)  # get the total number of days
+  last_day_prey_ass <- tail(Day_Prey_ass, n = 1)  # get the total number of days
+  last_day_trans_eff <- tail(Day_Trans_eff, n=1)
+  
+  for(i in 1:prey_items){
+    Prey_Conc <- Prey_conc[,i+1]
+    Prey_Conc <- approx(Day_conc,Prey_Conc, n = last_day_conc,method="linear")$y # interpolate prey 1 energy density
+    Prey_Conc <- Prey_Conc[First_day:Last_day]
+    globalout_Prey_Conc <- cbind(globalout_Prey_Conc,Prey_Conc)
+    Prey_conc <- read.csv(Prey_conc_File,head=TRUE,stringsAsFactors = FALSE)
+    Prey_ass <- Prey_ass[,i+1]  
+    Prey_ass <- approx(Day_Prey_ass,Prey_ass, n = last_day_prey_ass,method="constant")$y # interpolate prey 1 energy density
+    Prey_ass <- Prey_ass[First_day:Last_day]
+    globalout_Prey_ass <- cbind(globalout_Prey_ass,Prey_ass)
+    Prey_ass <- read.csv(Contam_assim_File,head=TRUE,stringsAsFactors = FALSE)
+    Trans_eff <- Trans_eff[,i+1]  
+    Trans_eff <- approx(Day_Trans_eff,Trans_eff, n = last_day_trans_eff,method="constant")$y # interpolate prey 1 energy density
+    Trans_eff <- Trans_eff[First_day:Last_day]
+    globalout_Trans_eff <- cbind(globalout_Trans_eff,Trans_eff)
+    Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE,stringsAsFactors = FALSE)
+  }
 
-colnames(globalout_Prey_Conc) <- names(Prey_conc)[-1]
-colnames(globalout_Prey_ass)  <- names(Prey_ass)[-1]
-colnames(globalout_Trans_eff) <- names(Trans_eff)[-1]
+  colnames(globalout_Prey_Conc) <- names(Prey_conc)[-1]
+  colnames(globalout_Prey_ass)  <- names(Prey_ass)[-1]
+  colnames(globalout_Trans_eff) <- names(Trans_eff)[-1]
+}  # end of if(calc.contaminant == TRUE)
 
 pred_cont_conc_old <- function(C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,CONTEQ) {
   # used in testing version of FB4; only two CONTEQ's.
@@ -658,82 +666,84 @@ pred_cont_conc <- function(R.O2,C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,Ew,Kbw,CO
 ### Nutrient Regeneration
 ########################################################################
 
-Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE,stringsAsFactors = FALSE)
-Day_Phos_Ae <- Phos_Ae[,1] # Days
-Phos_Conc_Pred <- read.csv(Phos_Conc_Pred_File,head=TRUE,stringsAsFactors = FALSE)
-Day_Phos_Conc_Pred <- Phos_Conc_Pred[,1] # Days
-Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
-Day_Phos_Conc_Prey <- Phos_Conc_Prey[,1] # Days
-
-prey_items_nut <- (ncol(Phos_Ae))-1
-
-last_day_Phos_Ae <- tail(Day_Phos_Ae, n = 1)  # get the total number of days
-last_day_Phos_Conc_Pred <- tail(Day_Phos_Conc_Pred, n = 1)  # get the total number of days
-last_day_Phos_Conc_Prey <- tail(Day_Phos_Conc_Prey, n = 1)  # get the total number of days
-
-globalout_Phos_Ae <- NULL
-globalout_Phos_Conc_Pred <- NULL
-globalout_Phos_Conc_Prey <- NULL
-
-Phos_Conc_Pred <- Phos_Conc_Pred[,2]  
-Phos_Conc_Pred <- approx(Day_Phos_Conc_Pred,Phos_Conc_Pred, n = last_day_Phos_Conc_Pred,method="constant")$y # interpolate prey 1 energy density
-Phos_Conc_Pred <- Phos_Conc_Pred[First_day:Last_day]
-globalout_Phos_Conc_Pred <- cbind(globalout_Phos_Conc_Pred,Phos_Conc_Pred)
-
-Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE,stringsAsFactors = FALSE)
-Day_Nit_Ae <- Nit_Ae[,1] # Days
-Nit_Conc_Pred <- read.csv(Nit_Conc_Pred_File,head=TRUE,stringsAsFactors = FALSE)
-Day_Nit_Conc_Pred <- Nit_Conc_Pred[,1] # Days
-Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
-Day_Nit_Conc_Prey <- Nit_Conc_Prey[,1] # Days
-
-prey_items_nut <- (ncol(Nit_Ae))-1
-
-last_day_Nit_Ae <- tail(Day_Nit_Ae, n = 1)  # get the total number of days
-last_day_Nit_Conc_Pred <- tail(Day_Nit_Conc_Pred, n = 1)  # get the total number of days
-last_day_Nit_Conc_Prey <- tail(Day_Nit_Conc_Prey, n = 1)  # get the total number of days
-
-globalout_Nit_Ae <- NULL
-globalout_Nit_Conc_Pred <- NULL
-globalout_Nit_Conc_Prey <- NULL
-
-Nit_Conc_Pred <- Nit_Conc_Pred[,2]  
-Nit_Conc_Pred <- approx(Day_Nit_Conc_Pred,Nit_Conc_Pred, n = last_day_Nit_Conc_Pred,method="constant")$y # interpolate prey 1 energy density
-Nit_Conc_Pred <- Nit_Conc_Pred[First_day:Last_day]
-globalout_Nit_Conc_Pred <- cbind(globalout_Nit_Conc_Pred,Nit_Conc_Pred)
-
-for(i in 1:prey_items_nut){
-  Phos_Ae <- Phos_Ae[,i+1]
-  Phos_Ae <- approx(Day_Phos_Ae,Phos_Ae, n = last_day_Phos_Ae,method="linear")$y # interpolate prey 1 energy density
-  Phos_Ae <- Phos_Ae[First_day:Last_day]
-  globalout_Phos_Ae <- cbind(globalout_Phos_Ae,Phos_Ae)
+if(calc.nut==TRUE){  # only need to read these files if "(calc.nut == TRUE)"
   Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE,stringsAsFactors = FALSE)
-  
-  Phos_Conc_Prey <- Phos_Conc_Prey[,i+1]  
-  Phos_Conc_Prey <- approx(Day_Phos_Conc_Prey,Phos_Conc_Prey, n = last_day_Phos_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
-  Phos_Conc_Prey <- Phos_Conc_Prey[First_day:Last_day]
-  globalout_Phos_Conc_Prey <- cbind(globalout_Phos_Conc_Prey,Phos_Conc_Prey)
+  Day_Phos_Ae <- Phos_Ae[,1] # Days
+  Phos_Conc_Pred <- read.csv(Phos_Conc_Pred_File,head=TRUE,stringsAsFactors = FALSE)
+  Day_Phos_Conc_Pred <- Phos_Conc_Pred[,1] # Days
   Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
+  Day_Phos_Conc_Prey <- Phos_Conc_Prey[,1] # Days
   
-  Nit_Ae <- Nit_Ae[,i+1]
-  Nit_Ae <- approx(Day_Nit_Ae,Nit_Ae, n = last_day_Nit_Ae,method="linear")$y # interpolate prey 1 energy density
-  Nit_Ae <- Nit_Ae[First_day:Last_day]
-  globalout_Nit_Ae <- cbind(globalout_Nit_Ae,Nit_Ae)
+  prey_items_nut <- (ncol(Phos_Ae))-1
+  
+  last_day_Phos_Ae <- tail(Day_Phos_Ae, n = 1)  # get the total number of days
+  last_day_Phos_Conc_Pred <- tail(Day_Phos_Conc_Pred, n = 1)  # get the total number of days
+  last_day_Phos_Conc_Prey <- tail(Day_Phos_Conc_Prey, n = 1)  # get the total number of days
+  
+  globalout_Phos_Ae <- NULL
+  globalout_Phos_Conc_Pred <- NULL
+  globalout_Phos_Conc_Prey <- NULL
+  
+  Phos_Conc_Pred <- Phos_Conc_Pred[,2]  
+  Phos_Conc_Pred <- approx(Day_Phos_Conc_Pred,Phos_Conc_Pred, n = last_day_Phos_Conc_Pred,method="constant")$y # interpolate prey 1 energy density
+  Phos_Conc_Pred <- Phos_Conc_Pred[First_day:Last_day]
+  globalout_Phos_Conc_Pred <- cbind(globalout_Phos_Conc_Pred,Phos_Conc_Pred)
+  
   Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE,stringsAsFactors = FALSE)
-  
-  Nit_Conc_Prey <- Nit_Conc_Prey[,i+1]  
-  Nit_Conc_Prey <- approx(Day_Nit_Conc_Prey,Nit_Conc_Prey, n = last_day_Nit_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
-  Nit_Conc_Prey <- Nit_Conc_Prey[First_day:Last_day]
-  globalout_Nit_Conc_Prey <- cbind(globalout_Nit_Conc_Prey,Nit_Conc_Prey)
+  Day_Nit_Ae <- Nit_Ae[,1] # Days
+  Nit_Conc_Pred <- read.csv(Nit_Conc_Pred_File,head=TRUE,stringsAsFactors = FALSE)
+  Day_Nit_Conc_Pred <- Nit_Conc_Pred[,1] # Days
   Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
-}
-
-colnames(globalout_Phos_Ae) <- names(Phos_Ae)[-1]
-colnames(globalout_Phos_Conc_Pred) <- names(Phos_Conc_Pred)[-1]
-colnames(globalout_Phos_Conc_Prey) <- names(Phos_Conc_Prey)[-1]
-colnames(globalout_Nit_Ae) <- names(Nit_Ae)[-1]
-colnames(globalout_Nit_Conc_Pred) <- names(Nit_Conc_Pred)[-1]
-colnames(globalout_Nit_Conc_Prey) <- names(Nit_Conc_Prey)[-1]
+  Day_Nit_Conc_Prey <- Nit_Conc_Prey[,1] # Days
+  
+  prey_items_nut <- (ncol(Nit_Ae))-1
+  
+  last_day_Nit_Ae <- tail(Day_Nit_Ae, n = 1)  # get the total number of days
+  last_day_Nit_Conc_Pred <- tail(Day_Nit_Conc_Pred, n = 1)  # get the total number of days
+  last_day_Nit_Conc_Prey <- tail(Day_Nit_Conc_Prey, n = 1)  # get the total number of days
+  
+  globalout_Nit_Ae <- NULL
+  globalout_Nit_Conc_Pred <- NULL
+  globalout_Nit_Conc_Prey <- NULL
+  
+  Nit_Conc_Pred <- Nit_Conc_Pred[,2]  
+  Nit_Conc_Pred <- approx(Day_Nit_Conc_Pred,Nit_Conc_Pred, n = last_day_Nit_Conc_Pred,method="constant")$y # interpolate prey 1 energy density
+  Nit_Conc_Pred <- Nit_Conc_Pred[First_day:Last_day]
+  globalout_Nit_Conc_Pred <- cbind(globalout_Nit_Conc_Pred,Nit_Conc_Pred)
+  
+  for(i in 1:prey_items_nut){
+    Phos_Ae <- Phos_Ae[,i+1]
+    Phos_Ae <- approx(Day_Phos_Ae,Phos_Ae, n = last_day_Phos_Ae,method="linear")$y # interpolate prey 1 energy density
+    Phos_Ae <- Phos_Ae[First_day:Last_day]
+    globalout_Phos_Ae <- cbind(globalout_Phos_Ae,Phos_Ae)
+    Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE,stringsAsFactors = FALSE)
+    
+    Phos_Conc_Prey <- Phos_Conc_Prey[,i+1]  
+    Phos_Conc_Prey <- approx(Day_Phos_Conc_Prey,Phos_Conc_Prey, n = last_day_Phos_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
+    Phos_Conc_Prey <- Phos_Conc_Prey[First_day:Last_day]
+    globalout_Phos_Conc_Prey <- cbind(globalout_Phos_Conc_Prey,Phos_Conc_Prey)
+    Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
+    
+    Nit_Ae <- Nit_Ae[,i+1]
+    Nit_Ae <- approx(Day_Nit_Ae,Nit_Ae, n = last_day_Nit_Ae,method="linear")$y # interpolate prey 1 energy density
+    Nit_Ae <- Nit_Ae[First_day:Last_day]
+    globalout_Nit_Ae <- cbind(globalout_Nit_Ae,Nit_Ae)
+    Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE,stringsAsFactors = FALSE)
+    
+    Nit_Conc_Prey <- Nit_Conc_Prey[,i+1]  
+    Nit_Conc_Prey <- approx(Day_Nit_Conc_Prey,Nit_Conc_Prey, n = last_day_Nit_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
+    Nit_Conc_Prey <- Nit_Conc_Prey[First_day:Last_day]
+    globalout_Nit_Conc_Prey <- cbind(globalout_Nit_Conc_Prey,Nit_Conc_Prey)
+    Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
+  }
+  
+  colnames(globalout_Phos_Ae) <- names(Phos_Ae)[-1]
+  colnames(globalout_Phos_Conc_Pred) <- names(Phos_Conc_Pred)[-1]
+  colnames(globalout_Phos_Conc_Prey) <- names(Phos_Conc_Prey)[-1]
+  colnames(globalout_Nit_Ae) <- names(Nit_Ae)[-1]
+  colnames(globalout_Nit_Conc_Pred) <- names(Nit_Conc_Pred)[-1]
+  colnames(globalout_Nit_Conc_Prey) <- names(Nit_Conc_Prey)[-1]
+}  # end of if(calc.nut == TRUE)
 
 phosphorous_allocation <- function(C,p_conc_prey,AEp,weightgain,p_conc_pred) {
   Cp <- C*p_conc_prey
@@ -765,62 +775,62 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
   if(outpt != "End") {  # Daily values not needed if only fitting final weight or consumption
     globalout <- data.frame(matrix(NA, nrow = Fin, ncol= (53+ncol(globalout_Prey)*4))) # Create a blank dataframe to store outputs
     colnames(globalout) <- c("Day",
-                             "Temperature",
+                             "Temperature.C",
                              "Starting.Weight",
-                             "Weight",
+                             "Weight.g",
                              "Population.Number",
-                             "Population.Biomass",
-                             "Specific.Growth.Rate.Joules",
-                             "Specific.Consumption.Rate.Joules",
-                             "Specific.Egestion.Rate",
-                             "Specific.Excretion.Rate",
-                             "Specific.Respiration.Rate",
-                             "Specific.SDA.Rate",
-                             "Specific.Consumption.Rate.Grams",
-                             "Specific.Growth.Rate.Grams",
-                             "Initial.Predator.Energy.Density",
-                             "Final.Predator.Energy.Density",
-                             "Mean.Prey.Energy.Density",
-                             "Gross.Production.Grams",
-                             "Gross.Production.Joules",
-                             "Cum.Gross.Production.Grams",
-                             "Cum.Gross.Production.Joules",
-                             "Gametic.Production.Grams",
-                             "Cum.Gametic.Production.Joules", # need total spawning E; JEB
-                             "Net.Production.Grams",
-                             "Net.Production.Joules",
-                             "Cum.Net.Production.Grams",
-                             "Cum.Net.Production.Joules",
-                             "Prey.Tot.Ind.Grams", 
-                             "Prey.Tot.Ind.Joules",
-                             "Cum.Prey.Tot.Ind.Grams", 
-                             "Cum.Prey.Tot.Ind.Joules",
-                             "Prey.Tot.Pop.Grams",
-                             "Prey.Tot.Pop.Joules",
-                             "Cum.Prey.Tot.Pop.Grams",
-                             "Cum.Prey.Tot.Pop.Joules",
+                             "Population.Biomass.g",
+                             "Specific.Growth.Rate.J.g.d",
+                             "Specific.Consumption.Rate.J.g.d",
+                             "Specific.Egestion.Rate.J.g.d",
+                             "Specific.Excretion.Rate.J.g.d",
+                             "Specific.Respiration.Rate.J.g.d",
+                             "Specific.SDA.Rate.J.g.d",
+                             "Specific.Consumption.Rate.g.g.d",
+                             "Specific.Growth.Rate.g.g.d",
+                             "Initial.Predator.Energy.Density.J.g",
+                             "Final.Predator.Energy.Density.J.g",
+                             "Mean.Prey.Energy.Density.J.g",
+                             "Gross.Production.g",
+                             "Gross.Production.J",
+                             "Cum.Gross.Production.g",
+                             "Cum.Gross.Production.J",
+                             "Gametic.Production.g",
+                             "Cum.Gametic.Production.J", # need total spawning E; JEB
+                             "Net.Production.g",
+                             "Net.Production.J",
+                             "Cum.Net.Production.g",
+                             "Cum.Net.Production.J",
+                             "Consumption.g", 
+                             "Consumption.J",
+                             "Cum.Cons.g", 
+                             "Cum.Cons.J",
+                             "Cons.Pop.g",
+                             "Cons.Pop.J",
+                             "Cum.Cons.Pop.g",
+                             "Cum.Cons.Pop.J",
                              "Mortality.number",
-                             "Mortality.Grams",
-                             "Nitrogen.Egestion",
-                             "Phosphorous.Egestion",
+                             "Mortality.g",
+                             "Nitrogen.Egestion.g",
+                             "Phosphorous.Egestion.g",
                              "N.to.P.Egestion",
-                             "Nitrogen.Excretion",
-                             "Phosphorous.Excretion",
+                             "Nitrogen.Excretion.g",
+                             "Phosphorous.Excretion.g",
                              "N.to.P.Excretion",
-                             "Nitrogen.Consumption",
-                             "Phosphorous.Consumption",
+                             "Nitrogen.Consumption.g",
+                             "Phosphorous.Consumption.g",
                              "N.to.P.Consumption",
-                             "Nitrogen.Growth",
-                             "Phosphorous.Growth",
+                             "Nitrogen.Growth.g",
+                             "Phosphorous.Growth.g",
                              "N.to.P.Growth",
-                             "Clearance.Rate",
-                             "Contaminant.Uptake",
-                             "Contaminant.Burden",
-                             "Contaminant.Predator.Concentration",
-                             paste(colnames(globalout_Prey),"Joules", sep = " "),
-                             paste(colnames(globalout_Prey),"Grams", sep = " "),
-                             paste(colnames(globalout_Prey),"pop.Joules", sep = " "),
-                             paste(colnames(globalout_Prey),"pop.Grams", sep = " "))
+                             "Contaminant.Clearance.Rate.ug.d",
+                             "Contaminant.Uptake.ug",
+                             "Contaminant.Burden.ug",
+                             "Contaminant.Predator.Concentration.ug.g",
+                             paste("Cons",colnames(globalout_Prey),"J", sep = " "),
+                             paste("Cons",colnames(globalout_Prey),"g", sep = " "),
+                             paste("Cons Pop",colnames(globalout_Prey),"J", sep = " "),
+                             paste("Cons Pop",colnames(globalout_Prey),"g", sep = " "))
   }  # end of if(outpt != "End"); JEB
   #
   for(i in 1:Fin) { # Create a loop that estimates growth for the duration of the simulation (Fin)      
@@ -833,7 +843,7 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     }
     
     Pred_E_i <- pred_En_D(W=W,day=i,PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
-    Pred_E_iplusone <- pred_En_D(W=W,day=(i+1),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
+    Pred_E_iplusone <- pred_En_D(W=W,day=(i+1),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g); only correct for PREDEDEQ==1
     Prey_ED_i <- globalout_Prey[i,]*globalout_Prey_E[i,] # vector of Prey energy densities (J/g) on day i
     mean_prey_ED <- sum(Prey_ED_i) # weighted mean prey energy density (J/g) on day i; JEB
     # Calculate consumption differently if specifying "Ration" or "Ration_prey":
@@ -860,21 +870,21 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     if(outpt != "End") {  # Daily values not needed if only fitting final weight or cons
       # Cons_prey_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in J
       Cons_prey_J <- data.frame(t(Cons.gg*Prey_ED_i*W)) # Consumption by prey type in J  # added by JEB
-      colnames(Cons_prey_J) <- paste(colnames(Cons_prey_J),"Joules", sep = " ")
+      colnames(Cons_prey_J) <- paste(colnames(Cons_prey_J),"J", sep = " ")
       # Cons_prey_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Consumption by prey in g
       Cons_prey_G <- data.frame(t(Cons.gg*(globalout_Prey[i,]*W))) # Consumption by prey type in g  # added by JEB
-      colnames(Cons_prey_G) <- paste(colnames(Cons_prey_G),"Grams", sep = " ")
+      colnames(Cons_prey_G) <- paste(colnames(Cons_prey_G),"g", sep = " ")
       # Cons_prey_pop_J <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in J
       Cons_prey_pop_J <- data.frame(t(Cons.gg*Prey_ED_i*W*Ind)) # Population consumption by prey in J  # added by JEB
-      colnames(Cons_prey_pop_J) <- paste(colnames(Cons_prey_pop_J),"pop.Joules", sep = " ")
+      colnames(Cons_prey_pop_J) <- paste(colnames(Cons_prey_pop_J),"pop.J", sep = " ")
       # Cons_prey_pop_G <- data.frame(t(consumption(Temperature=Temperature[i], W=W, p=p, CEQ=CEQ)* # Population consumption by prey in g
       Cons_prey_pop_G <- data.frame(t(Cons.gg*(globalout_Prey[i,]*W*Ind))) # Population consumption by prey in g  # added by JEB
-      colnames(Cons_prey_pop_G) <- paste(colnames(Cons_prey_pop_G),"pop.Grams", sep = " ")
+      colnames(Cons_prey_pop_G) <- paste(colnames(Cons_prey_pop_G),"pop.g", sep = " ")
     }
     Eg  <- egestion(C=Cons,Temperature=Temperature[i],p=p, EGEQ=EGEQ) # Egestion in J/g
     Ex  <- excretion(C=Cons, Eg=Eg,Temperature=Temperature[i], p=p, EXEQ=EXEQ) # Excretion in J/g
     SpecDA  <- SpDynAct(C=Cons,Eg=Eg) # Specific dynamic action in J/g 
-    R.O2  <- respiration(Temperature=Temperature[i], W=W, REQ) # respiration in (g O2/g) 
+    R.O2  <- respiration(Temperature=Temperature[i], W=W, REQ) # respiration in (g O2/g); used in some contaminant models
     Res <- R.O2*Oxycal  # respiration in (J/g) = (g O2/g)*(j/g O2); Oxycal = 13560 J/g O2
     
     G <-  Cons - (Res + Eg + Ex + SpecDA) # Energy put towards growth in J/g
@@ -894,20 +904,52 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     TotSpawnE <- TotSpawnE + SpawnE  # Cumulative Total Energy lost in reproduction so far; JEB
     
     # Calculate finalwt = weight at end of day i, and corresponding Predator energy density at end of day i; JEB
-    if(PREDEDEQ == 3) {
+    if(PREDEDEQ == 3) {  # calculating ED as power function of weight
       finalwt <- ((egain -SpawnE +(Pred_E_i*W))/alpha1)^(1/(beta1+1))
       Pred_E_iplusone <- pred_En_D(W=finalwt,day=(i),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
-    }else if(PREDEDEQ == 2){
-      alpha <- ifelse(W<as.numeric(cutoff),alpha1,alpha2)
-      beta <-  ifelse(W<as.numeric(cutoff),beta1,beta2)
-      finalwt <- (-alpha + sqrt(alpha*alpha + 4*beta*(W*(alpha+beta*W) +egain -SpawnE)))/(2*beta)
+    }else if(PREDEDEQ == 2){  # estimate ED from weight using one of two line segments
+      Wco = as.numeric(cutoff)  # weight at cutoff
+      if(W < Wco){    # weight (W) at start of day is below cutoff.
+        if(beta1 != 0){  # use quadratic formula to calc finalwt
+          finalwt <- (-alpha1 +sqrt(alpha1*alpha1 +4*beta1*(W*(alpha1+beta1*W) +egain -SpawnE)))/(2*beta1)
+        }else if(beta1 == 0){  # can't use quadratic formula; ED = alpha1
+          finalwt = (egain -SpawnE +W*alpha1)/alpha1
+        }
+        if(finalwt > Wco){  # if new wt crosses cutoff, recalculate finalwt to correctly account for this
+          egainCo = Wco*(alpha1+beta1*Wco) - W*(alpha1+beta1*W)  # energy needed to reach cutoff from W < Wco
+          if(beta2 != 0){  # accounting for energy needed to reach cutoff and beyond, calc new wt
+            finalwt = (-alpha2 +sqrt(alpha2*alpha2 +4*beta2*(egain-SpawnE -egainCo +Wco*(alpha1+beta1*Wco))))/(2*beta2)
+          }else if(beta2 == 0){  # then grow to cutoff, with ED = alpha2 beyond cutoff
+            finalwt = (egain-SpawnE -egainCo +Wco*(alpha1+beta1*Wco))/alpha2
+          }
+        }
+      }else if(W >= Wco){   # weight (W) at start of day is above cutoff.
+        if(beta2 != 0){  # use quadratic formula to calc finalwt
+          flagvalue <- ((alpha2*alpha2 +4*beta2*(W*(alpha2+beta2*W) +egain -SpawnE)))
+          if(is.na(flagvalue)){warning("Number inside sqrt is NaN: non a number")
+          }else if(flagvalue < 0){warning("Number inside sqrt is negative")}
+          finalwt <- (-alpha2 +sqrt(alpha2*alpha2 +4*beta2*(W*(alpha2+beta2*W) +egain -SpawnE)))/(2*beta2)
+        }else if(beta2 == 0){  # can't use quadratic formula; ED = alpha1
+          finalwt = (egain -SpawnE +W*alpha2)/alpha2
+        }
+        if(finalwt < Wco){  # if new wt decreases below cutoff, recalculate finalwt to account for this
+          elossCo = W*(alpha2+beta2*W) - Wco*(alpha1+beta1*Wco)  # energy loss needed to reach cutoff from W
+          if(beta1 != 0){  # accounting for energy to reach cutoff and beyond, calc new weight
+            partwt1 = sqrt(alpha1*alpha1 +4*beta1*(egain-SpawnE +elossCo +Wco*(alpha1+beta1*Wco))) # testing
+            finalwt = (-alpha1 +sqrt(alpha1*alpha1 +4*beta1*(egain-SpawnE +elossCo +Wco*(alpha1+beta1*Wco))))/(2*beta1)
+            testfinalwt = finalwt
+          }else if(beta1 == 0){  # then decline to cutoff, with ED = alpha1 below cutoff
+            finalwt = (egain-SpawnE +elossCo +Wco*alpha1)/alpha1
+          }
+        }
+      }
       Pred_E_iplusone <- pred_En_D(W=finalwt,day=(i),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
-    }else{
+    }else if(PREDEDEQ == 1){   # if PREDEDEQ == 1: then use 'day=(i+1)' to interpolate from the input file
       Pred_E_iplusone <- pred_En_D(W=W,day=(i+1),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g) is from csv file
       finalwt <- (egain -SpawnE +(Pred_E_i*W))/Pred_E_iplusone  # For PREDEDEQ ==1, Pred_E_iplusone
     }
 
-    #(egain+(Pred_E_i*W))/Pred_E_iplusone  # Predator weight at end of current day (g)
+    # finalwt is Predator weight (g) at end of current day
     
     weightgain  <-  finalwt-W  	#change in g/day
     
@@ -941,63 +983,62 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     if(outpt != "End") {  # Daily values not needed if only fitting final weight or cons
       ConsWInd <- ConsW*Ind  # save a repeated multiplication
       globalout[i,"Day"] <- Day_Temp[i]
-      globalout[i,"Temperature"]<-Temperature[i]
+      globalout[i,"Temperature.C"]<-Temperature[i]
       globalout[i,"Starting.Weight"]<-W
-      #globalout[i,"Weight"]<-finalwt-(spawn*finalwt)
-      globalout[i,"Weight"]<-finalwt  # spawning loss already accounted for; JEB
+      globalout[i,"Weight.g"]<-finalwt  # spawning loss already accounted for; JEB
       globalout[i,"Population.Number"]<-Ind2
-      globalout[i,"Population.Biomass"]<-finalwt*Ind
-      globalout[i,"Specific.Growth.Rate.Joules"]<-G
-      globalout[i,"Specific.Consumption.Rate.Joules"]<-Cons  # (J/g)
-      globalout[i,"Specific.Egestion.Rate"]<-Eg
-      globalout[i,"Specific.Excretion.Rate"]<-Ex
-      globalout[i,"Specific.Respiration.Rate"]<-Res
-      globalout[i,"Specific.SDA.Rate"]<-SpecDA
-      globalout[i,"Specific.Consumption.Rate.Grams"]<-Cons/mean_prey_ED # (g/g)
-      globalout[i,"Specific.Growth.Rate.Grams"]<-G/mean_prey_ED
-      globalout[i,"Initial.Predator.Energy.Density"]<-Pred_E_i
-      globalout[i,"Final.Predator.Energy.Density"]<-Pred_E_iplusone
-      globalout[i,"Mean.Prey.Energy.Density"]<-mean_prey_ED  # (J/g)
-      globalout[i,"Gross.Production.Grams"]<-(Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i
-      globalout[i,"Gross.Production.Joules"]<-(Cons +Res + Eg + Ex + SpecDA)*W
-      globalout[i,"Cum.Gross.Production.Grams"]<-cumsum((Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i)
-      globalout[i,"Cum.Gross.Production.Joules"]<-cumsum((Cons +Res + Eg + Ex + SpecDA)*W)
-      globalout[i,"Gametic.Production.Grams"]<-spawn*W  # (g); JEB; was spawn*finalwt
-      globalout[i,"Cum.Gametic.Production.Joules"]<-TotSpawnE # (J); Cumulative energy (J) for spawning; JEB
-      globalout[i,"Net.Production.Grams"]<-weightgain  # includes spawning losses; JEB
-      globalout[i,"Net.Production.Joules"]<-egain  # not including spawning; JEB
-      globalout[i,"Cum.Net.Production.Grams"]<-cumsum(weightgain)
-      globalout[i,"Cum.Net.Production.Joules"]<-cumsum(egain)
-      globalout[i,"Prey.Tot.Ind.Grams"]<-ConsW/mean_prey_ED
-      globalout[i,"Prey.Tot.Ind.Joules"]<-ConsW
-      globalout[i,"Cum.Prey.Tot.Ind.Grams"]<-cumsum(ConsW/mean_prey_ED)
-      globalout[i,"Cum.Prey.Tot.Ind.Joules"]<-cumsum(ConsW)
-      globalout[i,"Prey.Tot.Pop.Grams"]<-ConsWInd/mean_prey_ED
-      globalout[i,"Prey.Tot.Pop.Joules"]<-ConsWInd
-      globalout[i,"Cum.Prey.Tot.Pop.Grams"]<-cumsum(ConsWInd/mean_prey_ED)
-      globalout[i,"Cum.Prey.Tot.Pop.Joules"]<-cumsum(ConsWInd)
+      globalout[i,"Population.Biomass.g"]<-finalwt*Ind
+      globalout[i,"Specific.Growth.Rate.J.g.d"]<-G
+      globalout[i,"Specific.Consumption.Rate.J.g.d"]<-Cons  # (J/g)
+      globalout[i,"Specific.Egestion.Rate.J.g.d"]<-Eg
+      globalout[i,"Specific.Excretion.Rate.J.g.d"]<-Ex
+      globalout[i,"Specific.Respiration.Rate.J.g.d"]<-Res
+      globalout[i,"Specific.SDA.Rate.J.g.d"]<-SpecDA
+      globalout[i,"Specific.Consumption.Rate.g.g.d"]<-Cons/mean_prey_ED # (g/g)
+      globalout[i,"Specific.Growth.Rate.g.g.d"]<-G/mean_prey_ED
+      globalout[i,"Initial.Predator.Energy.Density.J.g"]<-Pred_E_i
+      globalout[i,"Final.Predator.Energy.Density.J.g"]<-Pred_E_iplusone
+      globalout[i,"Mean.Prey.Energy.Density.J.g"]<-mean_prey_ED  # (J/g)
+      globalout[i,"Gross.Production.g"]<-(Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i
+      globalout[i,"Gross.Production.J"]<-(Cons +Res + Eg + Ex + SpecDA)*W
+      globalout[i,"Cum.Gross.Production.g"]<-cumsum((Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i)
+      globalout[i,"Cum.Gross.Production.J"]<-cumsum((Cons +Res + Eg + Ex + SpecDA)*W)
+      globalout[i,"Gametic.Production.g"]<-spawn*W  # (g); JEB; was spawn*finalwt
+      globalout[i,"Cum.Gametic.Production.J"]<-TotSpawnE # (J); Cumulative energy (J) for spawning; JEB
+      globalout[i,"Net.Production.g"]<-weightgain  # includes spawning losses; JEB
+      globalout[i,"Net.Production.J"]<-egain  # not including spawning; JEB
+      globalout[i,"Cum.Net.Production.g"]<-cumsum(weightgain)
+      globalout[i,"Cum.Net.Production.J"]<-cumsum(egain)
+      globalout[i,"Consumption.g"]<-ConsW/mean_prey_ED
+      globalout[i,"Consumption.J"]<-ConsW
+      globalout[i,"Cum.Cons.g"]<-cumsum(ConsW/mean_prey_ED)
+      globalout[i,"Cum.Cons.J"]<-cumsum(ConsW)
+      globalout[i,"Cons.Pop.g"]<-ConsWInd/mean_prey_ED
+      globalout[i,"Cons.Pop.J"]<-ConsWInd
+      globalout[i,"Cum.Cons.Pop.g"]<-cumsum(ConsWInd/mean_prey_ED)
+      globalout[i,"Cum.Cons.Pop.J"]<-cumsum(ConsWInd)
       globalout[i,"Mortality.number"]<-Ind-Ind2
-      globalout[i,"Mortality.Grams"]<-(Ind-Ind2)*W
-      globalout[i,"Nitrogen.Egestion"]<-Nit[4]
-      globalout[i,"Phosphorous.Egestion"]<-Phos[4]
+      globalout[i,"Mortality.g"]<-(Ind-Ind2)*W
+      globalout[i,"Nitrogen.Egestion.g"]<-Nit[4]
+      globalout[i,"Phosphorous.Egestion.g"]<-Phos[4]
       globalout[i,"N.to.P.Egestion"]<-Nit[4]/Phos[4]
-      globalout[i,"Nitrogen.Excretion"]<-Nit[3]
-      globalout[i,"Phosphorous.Excretion"]<-Phos[3]
+      globalout[i,"Nitrogen.Excretion.g"]<-Nit[3]
+      globalout[i,"Phosphorous.Excretion.g"]<-Phos[3]
       globalout[i,"N.to.P.Excretion"]<-Nit[3]/Phos[3]
-      globalout[i,"Nitrogen.Consumption"]<-Nit[1]
-      globalout[i,"Phosphorous.Consumption"]<-Phos[1]
+      globalout[i,"Nitrogen.Consumption.g"]<-Nit[1]
+      globalout[i,"Phosphorous.Consumption.g"]<-Phos[1]
       globalout[i,"N.to.P.Consumption"]<-Nit[1]/Phos[1]
-      globalout[i,"Nitrogen.Growth"]<-Nit[2]
-      globalout[i,"Phosphorous.Growth"]<-Phos[2]
+      globalout[i,"Nitrogen.Growth.g"]<-Nit[2]
+      globalout[i,"Phosphorous.Growth.g"]<-Phos[2]
       globalout[i,"N.to.P.Growth"]<-Nit[2]/Phos[2]
-      globalout[i,"Clearance.Rate"]<-Cont[1]
-      globalout[i,"Contaminant.Uptake"]<-Cont[2]
-      globalout[i,"Contaminant.Burden"]<-Cont[3]
-      globalout[i,"Contaminant.Predator.Concentration"]<-Cont[4]
-      globalout[i,paste(colnames(globalout_Prey),"Joules", sep = " ")]<-Cons_prey_J
-      globalout[i,paste(colnames(globalout_Prey),"Grams", sep = " ")] <-Cons_prey_G
-      globalout[i,paste(colnames(globalout_Prey),"pop.Joules", sep = " ")]<-Cons_prey_pop_J
-      globalout[i,paste(colnames(globalout_Prey),"pop.Grams", sep = " ")] <-Cons_prey_pop_G
+      globalout[i,"Contaminant.Clearance.Rate.ug.d"]<-Cont[1]
+      globalout[i,"Contaminant.Uptake.ug"]<-Cont[2]
+      globalout[i,"Contaminant.Burden.ug"]<-Cont[3]
+      globalout[i,"Contaminant.Predator.Concentration.ug.g"]<-Cont[4]
+      globalout[i,paste("Cons",colnames(globalout_Prey),"J", sep = " ")]<-Cons_prey_J
+      globalout[i,paste("Cons",colnames(globalout_Prey),"g", sep = " ")] <-Cons_prey_G
+      globalout[i,paste("Cons Pop",colnames(globalout_Prey),"J", sep = " ")]<-Cons_prey_pop_J
+      globalout[i,paste("Cons Pop",colnames(globalout_Prey),"g", sep = " ")] <-Cons_prey_pop_G
     }
     #globalout<-cbind(globalout,Cons_prey)
     TotConsG  <- TotConsG + ConsW/mean_prey_ED  # Tot g cons; JEB
@@ -1007,16 +1048,15 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     Ind <- Ind2                
   }
   if(outpt != "End") {  # Daily values not needed if only fitting final weight or cons
-    globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")] <- 
-      cumsum( globalout[,c("Cum.Gross.Production.Grams","Cum.Gross.Production.Joules","Cum.Net.Production.Grams","Cum.Net.Production.Joules","Cum.Prey.Tot.Ind.Grams","Cum.Prey.Tot.Ind.Joules","Cum.Prey.Tot.Pop.Grams","Cum.Prey.Tot.Pop.Joules")])
+    globalout[,c("Cum.Gross.Production.g","Cum.Gross.Production.J","Cum.Net.Production.g","Cum.Net.Production.J","Cum.Cons.g","Cum.Cons.J","Cum.Cons.Pop.g","Cum.Cons.Pop.J")] <- 
+      cumsum( globalout[,c("Cum.Gross.Production.g","Cum.Gross.Production.J","Cum.Net.Production.g","Cum.Net.Production.J","Cum.Cons.g","Cum.Cons.J","Cum.Cons.Pop.g","Cum.Cons.Pop.J")])
   }
   if(outpt == "vector")                         {return(globalout)} 
-  #if(outpt == "vector") {return(globaloutprey)} # 
   if(outpt == "End" && fit.to=="Weight")        {return(W)} # only ending W value is needed; JEB
   if(outpt == "End" && fit.to=="Consumption")   {return(TotConsG)} # only ending Total Consumption value is needed; JEB
   if(outpt == "final" && fit.to=="Weight")      {return(globalout[Fin,4])} 
-  if(outpt == "final" && fit.to=="Consumption") {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Starting.Weight']))}
-  if(outpt == "final" && fit.to=="p-value")     {return(sum(globalout[,'Specific.Consumption.Rate.Grams']*globalout[,'Starting.Weight']))}
+  if(outpt == "final" && fit.to=="Consumption") {return(sum(globalout[,'Specific.Consumption.Rate.g.g.d']*globalout[,'Starting.Weight']))}
+  if(outpt == "final" && fit.to=="p-value")     {return(sum(globalout[,'Specific.Consumption.Rate.g.g.d']*globalout[,'Starting.Weight']))}
   
 }  # end of function grow()
    
@@ -1030,11 +1070,10 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
   max.iter <- 25 # Max number of iterations of binary search (increased from 20 to 25; JEB)
   
   fit.p <- function(p, IW, FW, W.tol, max.iter) {
-    W      <- IW
-    n.iter <- 0  # Counter for number of iterations
+    W      <- IW    # Initial weight
+    n.iter <- 0     # Counter for number of iterations
     p.max  <- 5.00  # current max
-    p.min  <- 0.001  # current min
-    # outpt <- "final"
+    p.min  <- 0.00  # current min
     outpt <- "End"  # desire only ending weight or consumption value, not full vector; revised by JEB
     withProgress(message = 'Calculating ...', min=0, max=max.iter, value = 0, {  # revised by JEB
       # initialize W.p
@@ -1043,13 +1082,12 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
       while((n.iter <= max.iter) & (abs(W.p-FW) > W.tol)) {
         n.iter <- n.iter + 1
         incProgress(1, detail = paste("Doing iteration", n.iter))  # added by JEB
-        #W.p <- grow(Temperature, W, p, outpt,globalout_Prey, globalout_Prey_E)
         if(W.p > FW) {p.max <- p} else {p.min <- p}
         p <- (p.min + p.max)/2 #p.min + (p.max - p.min)/2
         W.p <- grow(Temperature, W, p, outpt,globalout_Prey, globalout_Prey_E)
       }
     })  # end of "withProgress" function; added by JEB
-    return(p)
+    return(p) (g)
   }  # end of fit.p function
    
 ########################################################################
@@ -1091,9 +1129,19 @@ time.Elapsed <- proc.time() - time.Start # elapsed time # added by JEB
   output$summary <- renderTable({ 
     Model()
     parms <- read.csv("Parameters_official.csv",stringsAsFactors = FALSE) #  Read parameter values from .csv file
-    p <- ifelse(input$fitto=="Ration" || input$fitto=="Ration_prey",NA,format(round(p,4), nsmall = 3))
+    if(p < 0.0000002){  # Because of binary search method, lowest p-value is not quite zero.
+      Pmsg1 <- "Warning! p-value at lower limit. Model could not fit user-specified final weight."
+      p.OK = FALSE
+    }else if(p >= 4.9999998){  # Because of binary search method, highest p-value is not quite five.
+      Pmsg1 <- "Warning! p-value at upper limit. Model could not fit user-specified final weight."
+      p.OK = FALSE
+    }else{
+      Pmsg1 = NA
+      p.OK = TRUE
+    }
+    p.t <- ifelse(input$fitto=="Ration" || input$fitto=="Ration_prey",NA,format(round(p,4), nsmall = 3))
     Growth <- format(round(W1.p[(input$FD-input$ID+1),4],3), nsmall = 3)
-    Consom <- format(round(sum(W1.p[,"Specific.Consumption.Rate.Grams"]*W1.p[,"Starting.Weight"]),3), nsmall = 3)
+    Consom <- format(round(sum(W1.p[,"Specific.Consumption.Rate.g.g.d"]*W1.p[,"Starting.Weight"]),3), nsmall = 3)
     time.Run <- format(round(time.Elapsed[3],3), nsmall = 3) # 3rd value is total elapsed time JEB
     # Check for energy balance; JEB
     ED.start <- pred_En_D(W=Init_W,day=1,PREDEDEQ=PREDEDEQ) # initial predator energy density (J/g) on day 1
@@ -1109,20 +1157,24 @@ time.Elapsed <- proc.time() - time.Start # elapsed time # added by JEB
     Etol1 <- 0.000001  # Allowable relative error in energy budget; JEB
     Emsg1 <- ifelse(ErelDiff < Etol1, "OK. Energy budget balanced.", "Warning! Energy budget not balanced!") # JEB
     EB.OK <- ifelse(ErelDiff < Etol1, TRUE, FALSE) # JEB
-    E.relDiff.f <- format(round(ErelDiff,6), nsmall = 3)  # relative difference from E balance; JEB
+    E.relDiff.f <- format(round(ErelDiff,10), nsmall = 3)  # relative difference from E balance; JEB
     # end of check for energy balance; JEB
     if(EB.OK) {   # Energy budget balanced within tolerance; JEB
       Emsg1 <- "OK. Energy budget balanced."  # JEB
       Parameter <- c("p-value","Total consumption (g)","Final weight (g)","Run time (s)",Emsg1) # JEB
-      Value <- c(p, Consom, Growth, time.Run, E.relDiff.f) # added time.Run, E.relDiff, E.Diff.f;  JEB
+      Value <- c(p.t, Consom, Growth, time.Run, E.relDiff.f) # added time.Run, E.relDiff, E.Diff.f;  JEB
     } else {      # Energy budget not balanced within tolerance; JEB
       Emsg1 <- "Warning! Energy budget not balanced!"  # JEB
       E.Diff <- BodyE.start + TotEgain - TotSpawnE - BodyE.final  # Difference in E budget; JEB
       E.Diff.f <- format(round(E.Diff,3), nsmall = 3)  # Difference from E balance (J); JEB
       Emsg2 <- ifelse(E.Diff < 0, "Warning! Missing joules in energy budget!", "Warning! Extra joules in energy budget!") # JEB
       Parameter <- c("p-value","Total consumption (g)","Final weight (g)","Run time (s)",Emsg1,Emsg2) # JEB
-      Value <- c(p, Consom, Growth, time.Run, E.relDiff.f, E.Diff.f) # added time.Run, E.relDiff, E.Diff.f;  JEB
+      Value <- c(p.t, Consom, Growth, time.Run, E.relDiff.f, E.Diff.f) # added time.Run, E.relDiff, E.Diff.f;  JEB
     }    
+    if(p.OK == FALSE){
+      Parameter = append(Parameter, Pmsg1)
+      Value     = append(Value, p.t)
+    }
     as.data.frame(cbind(Parameter,Value))
   
   },include.rownames=FALSE)
@@ -1133,7 +1185,7 @@ time.Elapsed <- proc.time() - time.Start # elapsed time # added by JEB
 
   output$table <- renderTable({
     W1.p <- Model() 
-    #cumsum(W1.p[,c("Cum.Gross.Production.Grams")])
+    #cumsum(W1.p[,c("Cum.Gross.Production.g")])
     newdata = data.frame(W1.p[c(seq(1,(input$FD-input$ID+1),input$int)),c(input$var1,input$var2,input$var3,input$var4)]) 
     newdata
   },include.rownames=FALSE)
@@ -1306,8 +1358,9 @@ output$pred_ED <- renderPlot({
   }else if(PREDEDEQ == 2) {
     npt = 3  # number of points. PREDEDEQ 2 is linear in W, so go from 1 to cutoff to Wmax.
     Wco = as.numeric(cutoff)  # Weight at the change in slope for ED
+    Wmin = ifelse(Wco > 1, 1, 0.1) # use 1 as the minimum for the plot if cutoff > 1, else 0.1
     Wmax = 1.25*(as.numeric(cutoff))  # Set upper limit of W axis to 1.5*cutoff, to show change in slope
-    X.W <- c(1, Wco, Wmax)  # go from 1 to cutoff to Wmax.
+    X.W <- c(Wmin, Wco, Wmax)  # go from Wmin to cutoff to Wmax.
     Y.ED = rep(1, npt)      # create a vector of (3) numbers.
     for(j in 1:npt) {
       Y.ED[j] = pred_En_D(X.W[j], 1, PREDEDEQ)  # compute corresponding Energy Density (J/g)
