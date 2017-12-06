@@ -8,20 +8,20 @@ Temperature_File = "Main Inputs/Temperature.csv" # Temperature (deg C), over tim
 Diet_prop_File   = "Main Inputs/Diet_prop.csv"   # Diet proportions, by prey type, over time
 Prey_E_File      = "Main Inputs/Prey_E.csv"      # Energy density, by prey type, over time
 Indigestible_Prey_File = "Main Inputs/Indigestible_Prey.csv" # Fraction indigestible, by prey type, over time
-Predator_E_File  = "Main Inputs/Pred_E.csv"      # Predator energy density, over time
+Predator_E_File  = "Main Inputs/Pred_E.csv"      # Predator energy density, over time; only read if PREDEDEQ == 1
 #   Mortality
 Mortality_File   = "Sub-Models/Mortality/Mortality.csv" # Mortality during time intervals
 #   Reproduction
 Reproduction_File= "Sub-Models/Reproduction/Reproduction.csv" # Day(s) and fraction wt lost spawning
-#   Contaminants
+#   Contaminants    # Only read if calc.contaminant == TRUE
 Prey_conc_File       = "Sub-Models/Contaminant Accumulation/Contaminant Concentration.csv" # Contam conc in prey, by prey type, over time
 Contam_assim_File    = "Sub-Models/Contaminant Accumulation/Contaminant Assimilation.csv" # Fraction of contaminant assimilated by predator, from each prey type, over time
 Contam_trans_eff_File= "Sub-Models/Contaminant Accumulation/Transfer Efficiency.csv"  # Transfer efficiency of contam from prey to predator, by prey type, over time
-#   Phosphorus
+#   Phosphorus      # Only read if calc.nut == TRUE
 Phos_Ae_File        = "Sub-Models/Nutrient Regeneration/Phos_Ae.csv" # Predator's Phos assimilation efficiency, by prey type, over time
 Phos_Conc_Pred_File = "Sub-Models/Nutrient Regeneration/Phos_Conc_Pred.csv" # Phos in predator (g Phos/g), over time
 Phos_Conc_Prey_File = "Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv" # Phos in prey (g Phos/g), by prey type, over time
-#   Nitrogen
+#   Nitrogen        # Only read if calc.nut == TRUE
 Nit_Ae_File         = "Sub-Models/Nutrient Regeneration/Nit_Ae.csv" # Predator's N assimilation efficiency, by prey type, over time
 Nit_Conc_Pred_File  = "Sub-Models/Nutrient Regeneration/Nit_Conc_Pred.csv" # N in predator (g N/g), over time
 Nit_Conc_Prey_File  = "Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv" # N in prey (g N/g), by prey type, over time
@@ -254,7 +254,7 @@ shinyServer(function(input, output,session) {
   
   egestion3 <- function(C,Temperature,p) { ### Egestion model from Stewart et al. (1983)
     PE = FA*(Temperature^FB)*exp(FG*p)
-    PFF = sum(globalout_Ind_Prey[i,]*globalout_Prey[i,])
+    PFF = sum(globalout_Ind_Prey[i,]*globalout_Prey[i,]) # allows specification of indigestible prey, as proportions
     PF = ((PE-0.1)/0.9)*(1-PFF)+PFF  
     Eg = PF*C
     return(Eg)
@@ -354,45 +354,47 @@ shinyServer(function(input, output,session) {
   ### Indigestible Prey 
   ########################################################################
   
-  # Fraction of each prey type that are indigestible (See Stewart et al. 1983)
-  Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE,stringsAsFactors = FALSE)
-  Day_ind_prey <- Ind_prey[,1] # Days
-  Ind_prey_items <- (ncol(Ind_prey))-1
-  if(prey_items != Ind_prey_items) stop("Must have same number of prey items in file Indigestible_Prey.csv as in file Diet_prop.csv") # JEB
-  last_day_ind_prey <- tail(Day_ind_prey, n = 1)  # get the total number of days
-  
   globalout_Ind_Prey <- NULL
-  
-  for(i in 1:Ind_prey_items){
-    Prey <- Ind_prey[,i+1]
-    Prey <- approx(Day_ind_prey,Prey, n = last_day_ind_prey,method="linear")$y # interpolate prey 1 energy density
-    Prey <- Prey[First_day:Last_day]
-    globalout_Ind_Prey <- cbind(globalout_Ind_Prey,Prey)
+  if(EGEQ == 3) {  # Only read file if EGEQ == 3
+    # Fraction of each prey type that are indigestible (See Stewart et al. 1983)
     Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE,stringsAsFactors = FALSE)
-  }
-  
-  colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
-  # end of indigestible prey section
+    Day_ind_prey <- Ind_prey[,1] # Days
+    Ind_prey_items <- (ncol(Ind_prey))-1
+    if(prey_items != Ind_prey_items) stop("Must have same number of prey items in file Indigestible_Prey.csv as in file Diet_prop.csv") # JEB
+    last_day_ind_prey <- tail(Day_ind_prey, n = 1)  # get the total number of days
+    
+    for(i in 1:Ind_prey_items){
+      Prey <- Ind_prey[,i+1]
+      Prey <- approx(Day_ind_prey,Prey, n = last_day_ind_prey,method="linear")$y # interpolate prey 1 energy density
+      Prey <- Prey[First_day:Last_day]
+      globalout_Ind_Prey <- cbind(globalout_Ind_Prey,Prey)
+      Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE,stringsAsFactors = FALSE)
+    }
+    colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
+  }  # end of indigestible prey section
   
   ########################################################################  
   ### Predator energy density 
   ########################################################################
   
-  Predator_E <- read.csv(Predator_E_File,head=TRUE,stringsAsFactors = FALSE) 
-  Day_pred <- Predator_E[,1] # Days
-  Pred_E <- Predator_E[,2]  # Just use the predator energy values, which are in column 2
-  last_day_pred <- tail(Day_pred, n = 1)  # get the total number of days + 1
-  Dayz_pred <- approx(Day_pred,Pred_E, n = last_day_pred, method="linear")$x
-  Dayz_pred <- Dayz_pred[First_day:Last_day]
-  Pred_E <- approx(Day_pred,Pred_E, n = last_day_pred, method="linear")$y # interpolate temperature data
-  Pred_model <- data.frame(Y_Pred=Pred_E[c(last_day_pred-1,last_day_pred)],
-                           X_Pred=c(last_day_pred-1,last_day_pred))
-  predict_Pred_Eplusone <- lm(Y_Pred ~ X_Pred,data=Pred_model)
-  new <- data.frame(X_Pred=last_day_pred+1)
-  last_Pred_E <- predict(predict_Pred_Eplusone,new)
-  Pred_E <- c(Pred_E,last_Pred_E)
-  Pred_E <- Pred_E[First_day:(Last_day+1)]  ## added by JEB
-  
+  # We only need to read the Predator_E_File and set up daily vectors if PREDEDEQ == 1;
+  if(PREDEDEQ == 1) {
+    Predator_E <- read.csv(Predator_E_File,head=TRUE,stringsAsFactors = FALSE) 
+    Day_pred <- Predator_E[,1] # Days
+    Pred_E <- Predator_E[,2]  # Just use the predator energy values, which are in column 2
+    last_day_pred <- tail(Day_pred, n = 1)  # get the total number of days + 1
+    Dayz_pred <- approx(Day_pred,Pred_E, n = last_day_pred, method="linear")$x
+    Dayz_pred <- Dayz_pred[First_day:Last_day]
+    Pred_E <- approx(Day_pred,Pred_E, n = last_day_pred, method="linear")$y # interpolate temperature data
+    Pred_model <- data.frame(Y_Pred=Pred_E[c(last_day_pred-1,last_day_pred)],
+                             X_Pred=c(last_day_pred-1,last_day_pred))
+    predict_Pred_Eplusone <- lm(Y_Pred ~ X_Pred,data=Pred_model)
+    new <- data.frame(X_Pred=last_day_pred+1)
+    last_Pred_E <- predict(predict_Pred_Eplusone,new)
+    Pred_E <- c(Pred_E,last_Pred_E)
+    Pred_E <- Pred_E[First_day:(Last_day+1)]  ## added by JEB
+  }
+  # Define function for obtaining predator energy density
   pred_En_D <- function(W,day,PREDEDEQ) {    # Find Energy Density (ED, J/g) for this day and W
     if(PREDEDEQ == 1) {return(Pred_E[day])   # Use daily interpolated values from csv file; ignore weight
     } else if(PREDEDEQ == 3) {return(alpha1*W^beta1)  # ED is power function of weight; ignore day
@@ -1297,19 +1299,22 @@ output$prey_ED <- renderPlot({
 output$indigest_prey <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
 Last_day    <- input$FD             ### Last day of the simulation
-Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE,stringsAsFactors = FALSE)
-Day_ind_prey <- Ind_prey[,1] # Days
-Ind_prey_items <- (ncol(Ind_prey))-1
-last_day_ind_prey <- tail(Day_ind_prey, n = 1)  # get the total number of days
-globalout_Ind_Prey <- NULL
-for(i in 1:Ind_prey_items){
-  Prey <- Ind_prey[,i+1]
-  Prey <- approx(Day_ind_prey,Prey, n = last_day_ind_prey,method="linear")$y # interpolate prey 1 energy density
-  Prey <- Prey[First_day:Last_day]
-  globalout_Ind_Prey <- cbind(globalout_Ind_Prey,Prey)
+Sp <- input$spec  # Species chosen
+EGEQ <- parms[Sp,"EGEQ"] ### equation used for egestion
+if(EGEQ == 3) {
   Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE,stringsAsFactors = FALSE)
-}
-colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
+  Day_ind_prey <- Ind_prey[,1] # Days
+  Ind_prey_items <- (ncol(Ind_prey))-1
+  last_day_ind_prey <- tail(Day_ind_prey, n = 1)  # get the total number of days
+  globalout_Ind_Prey <- NULL
+  for(i in 1:Ind_prey_items){
+    Prey <- Ind_prey[,i+1]
+    Prey <- approx(Day_ind_prey,Prey, n = last_day_ind_prey,method="linear")$y # interpolate prey 1 energy density
+    Prey <- Prey[First_day:Last_day]
+    globalout_Ind_Prey <- cbind(globalout_Ind_Prey,Prey)
+    Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE,stringsAsFactors = FALSE)
+  }
+  colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
   plot(First_day:Last_day,globalout_Ind_Prey[,1],type="l",col=2,xlim=c(min(First_day),max(Last_day)),
        ylim=c(min(Ind_prey[,2:(ncol(Ind_prey))]),max(Ind_prey[,2:(ncol(Ind_prey))])),xlab="Day",ylab="Indigestible Prey (proportion)")
   if(Ind_prey_items>=2){
@@ -1318,6 +1323,12 @@ colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
     }
   }
   legend("topleft",col=2:(Ind_prey_items+1),lty=1,legend=colnames(globalout_Ind_Prey), bty = "n")
+  # end of if EGEQ == 3
+}else {  # if EGEQ not equal to 3, then
+  plot(First_day:Last_day,rep(0,(Last_day-First_day+1)),type="l",col=2,xlim=c(min(First_day),max(Last_day)),
+       ylim=c(0,1),xlab="Day",ylab="Indigestible Prey (proportion)")
+  text((Last_day+First_day)*0.5,0.8,"Proportion indigestible assumed to be 0.",col="red")
+} 
 })
 
 output$pred_ED <- renderPlot({
