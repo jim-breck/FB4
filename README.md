@@ -1,6 +1,10 @@
 ﻿## Welcome to Fish Bioenergetics 4.0
 
-We are today (12/1/2017) releasing Version 1.0.0 of the FB4 software! This release includes the new software and the FB4 User Manual. You can click a button on this web page to download the software and User Manual as a zipped file. Instructions for getting started are in the User Manual, and also summarized below.
+You can download the latest version of FB4 by clicking a button on this web page. The FB4 software, User Manual, and sample input files are all in the same zipped file. Instructions for getting started are in the User Manual (included in the zip file) and are also summarized below.
+
+We are today (12/6/2017) releasing Version 1.0.1 of the FB4 software. Details for this minor update are explained at the bottom of this page. 
+
+FB4 v1.0.0 was released on 12/1/2017.
 
 The Open Access article by [Deslauriers et al. (2017)](http://dx.doi.org/10.1080/03632415.2017.1377558) gives an introduction to this R-based modeling application.
 
@@ -95,3 +99,9 @@ It is also possible to visualize the outputs in a plot format. To do so, select 
 * Summary
 
 Finally, by selecting the __Summary__ tab, you will be able to see the final weight, consumption and p-value calculated or used for the simulation. Keep in mind that the p-value is irrelevant if you choose to run a simulation using the __Fit to: Ration__ option.
+
+### FB4 versions:
+- __Latest version: FB4 v1.0.1__, was released 12/6/2017. Click the "Download .zip" button at the top of this page to obtain the latest version. This minor update includes checks to avoid reading input files that are not needed for the selected species parameters. The Indigestible_prey file is not read unless EGEQ == 3; the program needs this file only if Egestion Model 3 is being used. Similarly, the Pred_E file is not read unless PREDEDEQ == 1; this file is not needed if predator energy density is based on weight (PREDEDEQ 2 or 3). The purpose of these changes is to help prevent file errors for new users, who may delete files or forget to update prey types in files they don't think they need.
+
+- FB4 v1.0.0 was released on 12/1/2017.
+
