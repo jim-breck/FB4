@@ -1,5 +1,7 @@
 require(shiny)
 
+# Fish Bioenergetics Model 4, version v1.0.2
+
 # Bioenergetics parameters, by species
 parms <- read.csv("Parameters_official.csv",stringsAsFactors = FALSE) #  Read parameter values from .csv file
 
@@ -63,12 +65,14 @@ shinyServer(function(input, output,session) {
   calc.nut <- input$nut               ### Do nutrient calcs? (TRUE/FALSE)
   # calc.nut is used to avoid reading the six nutrient files if not used
 
-  calc.contaminant <- input$contaminant  ### Do contaminant calcs? (TRUE/FALSE)
+  calc.contaminant<-input$contaminant ### Do contaminant calcs? (TRUE/FALSE)
   # calc.contaminant is used to avoid reading the three contaminant files if not used
 
-  # Could add flag calc.mortality to use to avoid reading Mortality_File if not used
-  # Could add flag calc.PRED_E to use to avoid reading Predator_E_File unless PREDEDEQ == 1
-  # Could add flag calc.reproduction to use to avoid reading Reproduction_File if not used
+  calc.pop_mort <- input$pop_mort     ### Do mortality calcs? (TRUE/FALSE)
+  # calc.pop_mort is used to avoid reading Mortality_File if not used
+  
+  calc.spawn <- input$spawn           ### Do fish spawn?
+  # calc.spawn is used to avoid reading Reproduction_File if not used
     
   ########################################################################
   ### Consumption parameters 
@@ -411,75 +415,75 @@ shinyServer(function(input, output,session) {
   ### Mortality
   ########################################################################
   
-  Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
-  Day_mort <- Mortality[,1] # Days
-  mort_types <- (ncol(Mortality))-1
-  last_day_mort <- tail(Day_mort, n = 1)  # get the total number of days
-  globalout_mort <- NULL
-  
-  for(j in 1:mort_types){
-    Mort <- Mortality[,j+1]
-    Mort <- approx(Day_mort,Mort, n = last_day_mort,method="constant")$y # interpolate mortality
-    Mort <- Mort[First_day:Last_day]
-    globalout_mort <- cbind(globalout_mort,Mort)
+  if(calc.pop_mort==TRUE){   # only read Mortality_File if needed
     Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
-  }
-
-colnames(globalout_mort) <- names(Mortality)[-1]
-globalout_mort <- data.frame(globalout_mort)
-globalout_mort$Nat_Mort_Int <- NA
-globalout_mort$Fish_Mort_Int <- NA
-
-days <- nrow(globalout_mort)
-intervals <- 1
-nat_int_start <- 1
-nat_int_dur <- 0
-fish_int_start <- 1
-fish_int_dur <- 0
-
-for(i in 1:(days-1)){
-  nat_int_dur <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],nat_int_dur+1,nat_int_dur+1)
-  globalout_mort$Nat_Mort_Int[nat_int_start:i] <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],rep(nat_int_dur,nat_int_dur),NA)
-  globalout_mort$Nat_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-nat_int_start,NA)
-  globalout_mort$Nat_Mort_Int[nat_int_start:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-nat_int_start+1,globalout_mort$Nat_Mort_Int[nat_int_start:i])
-  nat_int_dur <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],0,nat_int_dur)
-  nat_int_start <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],i+1,nat_int_start)
-  
-  fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],fish_int_dur+1,fish_int_dur+1)
-  globalout_mort$Fish_Mort_Int[fish_int_start:i] <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],rep(fish_int_dur,fish_int_dur),NA)
-  globalout_mort$Fish_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-fish_int_start,NA)
-  globalout_mort$Fish_Mort_Int[fish_int_start:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-fish_int_start+1,globalout_mort$Fish_Mort_Int[fish_int_start:i])
-  fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],0,fish_int_dur)
-  fish_int_start <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i+1,fish_int_start)
-
-}
-
-Individuals <- Ind
-globalout_individuals <- NULL
-
-for(i in 1:(Last_day-First_day+1)){  
-Z <- exp(log(1-globalout_mort$natural[i])/globalout_mort$Nat_Mort_Int[i]+log(1-globalout_mort$fishing[i])/globalout_mort$Fish_Mort_Int[i]-
-  (log(1-globalout_mort$natural[i])/globalout_mort$Nat_Mort_Int[i]*log(1-globalout_mort$fishing[i])/globalout_mort$Fish_Mort_Int[i]))
-Individuals <- Individuals*Z
-globalout_individuals <- rbind(globalout_individuals,data.frame(day=i,
-                                                                individuals=Individuals))
-
-}
-globalout_individuals$day <- First_day:Last_day
-# end of mortality section
+    Day_mort <- Mortality[,1] # Days
+    mort_types <- (ncol(Mortality))-1
+    last_day_mort <- tail(Day_mort, n = 1)  # get the total number of days
+    globalout_mort <- NULL
+    
+    for(j in 1:mort_types){
+      Mort <- Mortality[,j+1]
+      Mort <- approx(Day_mort,Mort, n = last_day_mort,method="constant")$y # interpolate mortality
+      Mort <- Mort[First_day:Last_day]
+      globalout_mort <- cbind(globalout_mort,Mort)
+      Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
+    }
+    
+    colnames(globalout_mort) <- names(Mortality)[-1]
+    globalout_mort <- data.frame(globalout_mort)
+    globalout_mort$Nat_Mort_Int <- NA
+    globalout_mort$Fish_Mort_Int <- NA
+    
+    days <- nrow(globalout_mort)
+    intervals <- 1
+    nat_int_start <- 1
+    nat_int_dur <- 0
+    fish_int_start <- 1
+    fish_int_dur <- 0
+    
+    for(i in 1:(days-1)){
+      nat_int_dur <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],nat_int_dur+1,nat_int_dur+1)
+      globalout_mort$Nat_Mort_Int[nat_int_start:i] <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],rep(nat_int_dur,nat_int_dur),NA)
+      globalout_mort$Nat_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-nat_int_start,NA)
+      globalout_mort$Nat_Mort_Int[nat_int_start:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-nat_int_start+1,globalout_mort$Nat_Mort_Int[nat_int_start:i])
+      nat_int_dur <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],0,nat_int_dur)
+      nat_int_start <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],i+1,nat_int_start)
+      
+      fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],fish_int_dur+1,fish_int_dur+1)
+      globalout_mort$Fish_Mort_Int[fish_int_start:i] <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],rep(fish_int_dur,fish_int_dur),NA)
+      globalout_mort$Fish_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-fish_int_start,NA)
+      globalout_mort$Fish_Mort_Int[fish_int_start:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-fish_int_start+1,globalout_mort$Fish_Mort_Int[fish_int_start:i])
+      fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],0,fish_int_dur)
+      fish_int_start <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i+1,fish_int_start)
+    }
+    
+    Individuals <- Ind
+    globalout_individuals <- NULL
+    
+    for(i in 1:(Last_day-First_day+1)){  
+      Z <- exp(log(1-globalout_mort$natural[i])/globalout_mort$Nat_Mort_Int[i]+log(1-globalout_mort$fishing[i])/globalout_mort$Fish_Mort_Int[i]-
+                 (log(1-globalout_mort$natural[i])/globalout_mort$Nat_Mort_Int[i]*log(1-globalout_mort$fishing[i])/globalout_mort$Fish_Mort_Int[i]))
+      Individuals <- Individuals*Z
+      globalout_individuals <- rbind(globalout_individuals,data.frame(day=i,individuals=Individuals))
+    }
+    globalout_individuals$day <- First_day:Last_day
+  }  # end of mortality section
 
 ########################################################################
 ### Reproduction
 ########################################################################
 
-Reproduction <- read.csv(Reproduction_File,head=TRUE,stringsAsFactors = FALSE)
-Day <- Reproduction[,1] # Days
-Reproduction <- Reproduction[,2]  # Just use the Temp values, which are in column 2
-last_day <- tail(Day, n = 1)  # get the total number of days
-Dayz <- approx(Day,Reproduction, n = last_day, method="linear")$x
-Dayz <- Dayz[First_day:Last_day]
-Reproduction <- approx(Day,Reproduction, n = last_day, method="constant")$y # interpolate temperature data
-Reproduction <- Reproduction[First_day:Last_day]
+  if(calc.spawn){
+    Reproduction <- read.csv(Reproduction_File,head=TRUE,stringsAsFactors = FALSE)
+    Day <- Reproduction[,1] # Days
+    Reproduction <- Reproduction[,2]  # Just use the Temp values, which are in column 2
+    last_day <- tail(Day, n = 1)  # get the total number of days
+    Dayz <- approx(Day,Reproduction, n = last_day, method="linear")$x
+    Dayz <- Dayz[First_day:Last_day]
+    Reproduction <- approx(Day,Reproduction, n = last_day, method="constant")$y # interpolate temperature data
+    Reproduction <- Reproduction[First_day:Last_day]
+  }
   
 ########################################################################
 ### Body Composition
@@ -837,7 +841,7 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
   #
   for(i in 1:Fin) { # Create a loop that estimates growth for the duration of the simulation (Fin)      
 
-    if(input$pop_mort==TRUE){ 
+    if(calc.pop_mort==TRUE){ 
       Ind2 <- globalout_individuals[i,2] # Population mortality
     }else{
       Ind2 <- 1
@@ -893,7 +897,7 @@ grow <- function(Temperature, W, p, outpt, globalout_Prey, globalout_Prey_E) { #
     
     egain  <-  (G * W)      # net energy gain in J
     #Now account for spawning loss of energy; JEB
-    if(input$spawn==TRUE){ # Spawning function
+    if(calc.spawn==TRUE){ # Spawning function
       spawn <- Reproduction[i]
     }else{
       spawn <- 0
@@ -1397,14 +1401,15 @@ last_day_mort <- tail(Day_mort, n = 1)  # get the total number of days
 globalout_mort <- NULL
 for(i in 1:mort_types){
   Mort <- Mortality[,i+1]
-  Mort <- approx(Day_mort,Mort, n = last_day_mort,method="constant")$y # interpolate prey 1 energy density
-  Mort <- Mort[First_day:Last_day]
+  Mort <- approx(Day_mort,Mort, n = last_day_mort, method="constant")$y # interpolate prey 1 energy density
+  Last_daym <- min(last_day_mort, Last_day)  # use minimum to prevent going past end of days in Mortality_File
+  Mort <- Mort[First_day:Last_daym]
   globalout_mort <- cbind(globalout_mort,Mort)
   Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
 }
 colnames(globalout_mort) <- names(Mortality)[-1]
 globalout_mort_prob <- NULL
-for(i in 1:(Last_day-First_day+1)){
+for(i in 1:(Last_daym-First_day+1)){  # changed to Last_daym to prevent going past end of days in Mortality_File
   preys <- 1
   for(j in 1:mort_types){
     preys <- preys*globalout_mort[i,j]
@@ -1412,13 +1417,19 @@ for(i in 1:(Last_day-First_day+1)){
   mort_prob <- sum(globalout_mort[i,1:mort_types])-preys
   globalout_mort_prob <- rbind(globalout_mort_prob,sum(globalout_mort[i,1:mort_types])-preys)              
 }  
+text.x <- 0.50*(min(First_day) + max(Last_daym))               # x position for text, if needed
+text.y <- 0.90*ave(globalout_mort[1:nrow(globalout_mort),2])   # y position for text, if needed
+
 colnames(globalout_mort_prob) <- "total"
-globalout_mort <- cbind(First_day:Last_day,globalout_mort,globalout_mort_prob)
-  plot(globalout_mort[1:nrow(globalout_mort),1],globalout_mort[1:nrow(globalout_mort),2],type="l",xlab="Day",ylab="Mortality (probability)",col=2,
-       xlim=c(min(First_day),max(Last_day)),
-       ylim=c(min(globalout_mort[,2:(ncol(globalout_mort))]),max(globalout_mort[,2:(ncol(globalout_mort))])))
+globalout_mort <- cbind(First_day:Last_daym,globalout_mort,globalout_mort_prob)
+  plot(globalout_mort[1:nrow(globalout_mort),1],globalout_mort[1:nrow(globalout_mort),2],type="l",
+      xlab="Day",ylab="Mortality (probability)",col=2,
+      xlim=c(min(First_day),max(Last_daym)),
+      #ylim=c(min(globalout_mort[,2:(ncol(globalout_mort))]),max(globalout_mort[,2:(ncol(globalout_mort))])))
+      ylim=c(0, max(globalout_mort[,2:(ncol(globalout_mort))])))
   lines(globalout_mort[1:nrow(globalout_mort),1],globalout_mort[1:nrow(globalout_mort),3],col=3)
   lines(globalout_mort[1:nrow(globalout_mort),1],globalout_mort[1:nrow(globalout_mort),4],col=4)
+  if(Last_daym < Last_day){text(text.x, text.y, "Need to add more days to Mortality File.",col="red")}
   legend("topleft",col=2:4,lty=1,legend=colnames(globalout_mort)[-1], bty = "n")
 })
 
@@ -1434,7 +1445,8 @@ globalout_mort <- NULL
 for(j in 1:mort_types){
   Mort <- Mortality[,j+1]
   Mort <- approx(Day_mort,Mort, n = last_day_mort,method="constant")$y # interpolate mortality
-  Mort <- Mort[First_day:Last_day]
+  Last_dm <- min(last_day_mort,Last_day)
+  Mort <- Mort[First_day:Last_dm]
   globalout_mort <- cbind(globalout_mort,Mort)
   Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
 }
@@ -1465,25 +1477,24 @@ for(i in 1:(days-1)){
   globalout_mort$Fish_Mort_Int[fish_int_start:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-fish_int_start+1,globalout_mort$Fish_Mort_Int[fish_int_start:i])
   fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],0,fish_int_dur)
   fish_int_start <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i+1,fish_int_start)
-  
 }
 
 Individuals <- input$ind
 globalout_individuals <- NULL
 
-for(i in 1:(Last_day-First_day+1)){  
+for(i in 1:(Last_dm-First_day+1)){  ## changed Last_day to Last_dm, because Last_dm < Last_day in some cases
   Z <- exp(log(1-globalout_mort$natural[i])/globalout_mort$Nat_Mort_Int[i]+log(1-globalout_mort$fishing[i])/globalout_mort$Fish_Mort_Int[i]-
              (log(1-globalout_mort$natural[i])/globalout_mort$Nat_Mort_Int[i]*log(1-globalout_mort$fishing[i])/globalout_mort$Fish_Mort_Int[i]))
   Individuals <- Individuals*Z
-  globalout_individuals <- rbind(globalout_individuals,data.frame(day=i,
-                                                                  individuals=Individuals))
-  
+  globalout_individuals <- rbind(globalout_individuals,data.frame(day=i, individuals=Individuals))
 }
-globalout_individuals$day <- First_day:Last_day
+globalout_individuals$day <- First_day:Last_dm  # changed Last_day to Last_dm
 
 plot(globalout_individuals[,1],globalout_individuals[,2],type="l",xlab="Day",ylab="Population number",
-     xlim=c(min(First_day),max(Last_day)),
+     xlim=c(min(First_day),max(Last_dm)),   # changed Last_day to Last_dm
      ylim=c(min(globalout_individuals[,2]),max(globalout_individuals[,2])))
+if(last_day_mort < Last_day){text(ave(globalout_individuals[,1]),0.8*max(globalout_individuals[,2]),
+                                  "May need to include more days.",4,col="red")}
 })
 
 output$repro <- renderPlot({
@@ -1491,13 +1502,15 @@ output$repro <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
   Last_day    <- input$FD             ### Last day of the simulation   
   Day <- Reproduction[,1] # Days
-  Reproduction <- Reproduction[,2]  # Just use the Temp values, which are in column 2
+  Reproduction <- Reproduction[,2]  # Just use the Reprod values, which are in column 2
   last_day <- tail(Day, n = 1)  # get the total number of days
   Dayz <- approx(Day,Reproduction, n = last_day, method="linear")$x
-  Dayz <- Dayz[First_day:Last_day]
+  Last_d <- min(last_day,Last_day)
+  Dayz <- Dayz[First_day:Last_d]
   Reproduction <- approx(Day,Reproduction, n = last_day, method="constant")$y # interpolate temperature data
-  Reproduction <- Reproduction[First_day:Last_day]
+  Reproduction <- Reproduction[First_day:Last_d]
   plot(Dayz,Reproduction,type="l",xlab="Day",ylab="Weight Lost to Reproduction (Proportion)")
+  if(last_day < Last_day){text(ave(Dayz),0.8*max(Reproduction),"May need to include more days.", col="red")}
 })
 
 output$cont_ae <- renderPlot({
