@@ -1,11 +1,14 @@
 require(shiny)
 
-# Fish Bioenergetics Model 4, version v1.0.2
+# Fish Bioenergetics Model 4, version v1.0.3
+FB4.version = "v1.0.3"  # This patch adds an FB4_Log_File to record input values used for this run;
+#  some summary information is also added to this log file at the end of the run.
+FB4.File_dir = getwd()  # Remember the file directory for this session
 
 # Bioenergetics parameters, by species
 parms <- read.csv("Parameters_official.csv",stringsAsFactors = FALSE) #  Read parameter values from .csv file
 
-#    Main Input files
+#   Main Input files
 Temperature_File = "Main Inputs/Temperature.csv" # Temperature (deg C), over time
 Diet_prop_File   = "Main Inputs/Diet_prop.csv"   # Diet proportions, by prey type, over time
 Prey_E_File      = "Main Inputs/Prey_E.csv"      # Energy density, by prey type, over time
@@ -27,6 +30,9 @@ Phos_Conc_Prey_File = "Sub-Models/Nutrient Regeneration/Phos_Conc_Prey.csv" # Ph
 Nit_Ae_File         = "Sub-Models/Nutrient Regeneration/Nit_Ae.csv" # Predator's N assimilation efficiency, by prey type, over time
 Nit_Conc_Pred_File  = "Sub-Models/Nutrient Regeneration/Nit_Conc_Pred.csv" # N in predator (g N/g), over time
 Nit_Conc_Prey_File  = "Sub-Models/Nutrient Regeneration/Nit_Conc_Prey.csv" # N in prey (g N/g), by prey type, over time
+#
+#   Output file
+FB4_Log_File        = "FB4_Log_File.csv" # File to save values used in this run, and summary output.
 
 shinyServer(function(input, output,session) {
   
@@ -38,17 +44,19 @@ shinyServer(function(input, output,session) {
   
   Sp <- input$spec  # Select the species of interest by changing the number to the corresponding row number
   
-  fit.to  <- print(input$fitto)       ### Fit to either final weight, consumption, ration, or p-value
+  fit.to  <- print(input$fitto)       ### Fit to either final weight, consumption, ration(g), ration(%) or p-value
   
   Init_W  <- input$InW                ### Initial weight in g wet weight
   
   Final_W  <- input$FinW              ### Final weight in g wet weight
-  
+ 
   eaten <- input$FinW                 ### Total food eaten in g wet weight
   
   Ration_prey <- input$FinW           ### Daily food eaten in g wet weight
   
-  Ration <- input$FinW/100            ### % of body weight eaten
+  Ration  <- input$FinW/100        
+  
+  ### % of body weight eaten
   
   p_value <- input$FinW               ### Proporation of Cmax eaten
   
@@ -67,13 +75,47 @@ shinyServer(function(input, output,session) {
 
   calc.contaminant<-input$contaminant ### Do contaminant calcs? (TRUE/FALSE)
   # calc.contaminant is used to avoid reading the three contaminant files if not used
-
+  X_Pred   <- input$init_pred_conc  # initial contaminant conc in fish (micrograms/g), parts per million
+  CONTEQ   <- input$cont_acc        # Contaminant Equation (1, or 2); Equation 3 coming soon.
+  
   calc.pop_mort <- input$pop_mort     ### Do mortality calcs? (TRUE/FALSE)
   # calc.pop_mort is used to avoid reading Mortality_File if not used
   
   calc.spawn <- input$spawn           ### Do fish spawn?
   # calc.spawn is used to avoid reading Reproduction_File if not used
     
+  ########################################################################
+  ### Remember Initial conditions in FB4; save these for the Log_File
+  ########################################################################
+  
+  # Names of the input specifications:
+  FB4.Param <- c("--------",
+                     "Date-Time",    "FB4.version", "FB4.File_dir", 
+                     "FB4_Log_File", "Species_Num", "Species_txt",
+                     "Initial_W",    "fit.to",      "fit.to value",
+                     "First_day",    "Last_day",    "N_indiv",  "Oxycal",
+                     "T_File",
+                     "Diet_prop_File",
+                     "Prey_E_File")
+
+  In.fit.to_val  = ifelse(fit.to =="Ration",      Final_W*100, Final_W)
+  # If the input values are not used, then set them to NA
+  In.Pred_Conc <- ifelse(calc.contaminant,       X_Pred,  NA)
+  In.CONTEQ    <- ifelse(calc.contaminant,       CONTEQ,  NA)
+  
+  # Values of the input specifications:
+  FB4.Value <- c(as.character("********"),
+                 as.character(date()),       as.character(FB4.version), as.character(FB4.File_dir), 
+                 as.character(FB4_Log_File), Sp,                        as.character(parms[Sp,"Species"]),
+                 Init_W,                     as.character(fit.to),      In.fit.to_val,
+                 First_day,                 Last_day,                   Ind,  Oxycal,
+                 as.character(Temperature_File),
+                 as.character(Diet_prop_File),
+                 as.character(Prey_E_File))
+  # Later in the program, additional items are appended to the vectors FB4.Param and FB4.Value;
+  #   Then they are written to a file, and to the RStudio Console window.
+  
+
   ########################################################################
   ### Consumption parameters 
   ########################################################################
@@ -95,7 +137,7 @@ shinyServer(function(input, output,session) {
   }
   
   if(CEQ == 3) {      ### Additional parameters neded if the consumption model 3 is used
-    CG1 = (1/(CTO-CQ))*log((0.98*(1-CK1))/(CK1*0.02))
+    CG1 = (1/(CTO- CQ))*log((0.98*(1-CK1))/(CK1*0.02))
     CG2 = (1/(CTL-CTM))*log((0.98*(1-CK4))/(CK4*0.02))
   }
   
@@ -324,9 +366,9 @@ shinyServer(function(input, output,session) {
   ### Diet proportions and energetical contribution 
   ########################################################################
   
-  Diet_prop <- read.csv(Diet_prop_File,head=TRUE,stringsAsFactors = FALSE)
+  Diet_prop <- read.csv(Diet_prop_File,head=TRUE, stringsAsFactors = FALSE)
   Day_prey <- Diet_prop[,1] # Days
-  Prey_E <- read.csv(Prey_E_File,head=TRUE,stringsAsFactors = FALSE)
+  Prey_E <- read.csv(Prey_E_File,head=TRUE, stringsAsFactors = FALSE)
   Day_Prey_E <- Prey_E[,1] # Days
   prey_items   <- (ncol(Diet_prop))-1  # number of prey items in Diet_prop file
   prey_items_E <- (ncol(Prey_E))-1     # number of prey items in Prey_E file
@@ -342,12 +384,12 @@ shinyServer(function(input, output,session) {
     Prey <- approx(Day_prey,Prey, n = last_day_prey,method="linear")$y # interpolate prey 1 energy density
     Prey <- Prey[First_day:Last_day]
     globalout_Prey <- cbind(globalout_Prey,Prey)  # Proportion of each prey type in the diet
-    Diet_prop <- read.csv(Diet_prop_File,head=TRUE,stringsAsFactors = FALSE)
+    Diet_prop <- read.csv(Diet_prop_File,head=TRUE, stringsAsFactors = FALSE)
     Prey_E <- Prey_E[,i+1]  
     Prey_E <- approx(Day_Prey_E,Prey_E, n = last_day_prey_E,method="linear")$y # interpolate prey 1 energy density
     Prey_E <- Prey_E[First_day:Last_day]
     globalout_Prey_E <- cbind(globalout_Prey_E,Prey_E)
-    Prey_E <- read.csv(Prey_E_File,head=TRUE,stringsAsFactors = FALSE)
+    Prey_E <- read.csv(Prey_E_File,head=TRUE, stringsAsFactors = FALSE)
   }
   
   colnames(globalout_Prey) <- names(Diet_prop)[-1]
@@ -361,7 +403,9 @@ shinyServer(function(input, output,session) {
   globalout_Ind_Prey <- NULL
   if(EGEQ == 3) {  # Only read file if EGEQ == 3
     # Fraction of each prey type that are indigestible (See Stewart et al. 1983)
-    Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE,stringsAsFactors = FALSE)
+    Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE, stringsAsFactors = FALSE)
+    FB4.Param = append(FB4.Param, c("EGEQ", "Indigestible_Prey_File"))
+    FB4.Value = append(FB4.Value, c("3", as.character(Indigestible_Prey_File)))  # record file used
     Day_ind_prey <- Ind_prey[,1] # Days
     Ind_prey_items <- (ncol(Ind_prey))-1
     if(prey_items != Ind_prey_items) stop("Must have same number of prey items in file Indigestible_Prey.csv as in file Diet_prop.csv") # JEB
@@ -372,7 +416,7 @@ shinyServer(function(input, output,session) {
       Prey <- approx(Day_ind_prey,Prey, n = last_day_ind_prey,method="linear")$y # interpolate prey 1 energy density
       Prey <- Prey[First_day:Last_day]
       globalout_Ind_Prey <- cbind(globalout_Ind_Prey,Prey)
-      Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE,stringsAsFactors = FALSE)
+      Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE, stringsAsFactors = FALSE)
     }
     colnames(globalout_Ind_Prey) <- names(Ind_prey)[-1]
   }  # end of indigestible prey section
@@ -383,7 +427,9 @@ shinyServer(function(input, output,session) {
   
   # We only need to read the Predator_E_File and set up daily vectors if PREDEDEQ == 1;
   if(PREDEDEQ == 1) {
-    Predator_E <- read.csv(Predator_E_File,head=TRUE,stringsAsFactors = FALSE) 
+    Predator_E <- read.csv(Predator_E_File,head=TRUE, stringsAsFactors = FALSE) 
+    FB4.Param = append(FB4.Param, c("PREDEDEQ", "Predator_E_File"))
+    FB4.Value = append(FB4.Value, c("1", as.character(Predator_E_File)))  # record file used
     Day_pred <- Predator_E[,1] # Days
     Pred_E <- Predator_E[,2]  # Just use the predator energy values, which are in column 2
     last_day_pred <- tail(Day_pred, n = 1)  # get the total number of days + 1
@@ -415,8 +461,12 @@ shinyServer(function(input, output,session) {
   ### Mortality
   ########################################################################
   
+  FB4.Param = append(FB4.Param, "calc.pop_mort")
+  FB4.Value = append(FB4.Value, as.logical(calc.pop_mort))
   if(calc.pop_mort==TRUE){   # only read Mortality_File if needed
-    Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
+    Mortality <- read.csv(Mortality_File,head=TRUE, stringsAsFactors = FALSE)
+    FB4.Param = append(FB4.Param, "Mortality_File")
+    FB4.Value = append(FB4.Value,  as.character(Mortality_File))  # record file used
     Day_mort <- Mortality[,1] # Days
     mort_types <- (ncol(Mortality))-1
     last_day_mort <- tail(Day_mort, n = 1)  # get the total number of days
@@ -427,7 +477,7 @@ shinyServer(function(input, output,session) {
       Mort <- approx(Day_mort,Mort, n = last_day_mort,method="constant")$y # interpolate mortality
       Mort <- Mort[First_day:Last_day]
       globalout_mort <- cbind(globalout_mort,Mort)
-      Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
+      Mortality <- read.csv(Mortality_File,head=TRUE, stringsAsFactors = FALSE)
     }
     
     colnames(globalout_mort) <- names(Mortality)[-1]
@@ -470,12 +520,17 @@ shinyServer(function(input, output,session) {
     globalout_individuals$day <- First_day:Last_day
   }  # end of mortality section
 
-########################################################################
-### Reproduction
-########################################################################
+  ########################################################################
+  ### Reproduction
+  ########################################################################
 
+  FB4.Param = append(FB4.Param, "calc.spawn")
+  FB4.Value = append(FB4.Value, as.logical(calc.spawn))
+  
   if(calc.spawn){
-    Reproduction <- read.csv(Reproduction_File,head=TRUE,stringsAsFactors = FALSE)
+    Reproduction <- read.csv(Reproduction_File,head=TRUE, stringsAsFactors = FALSE)
+    FB4.Param = append(FB4.Param, "Reproduction_File")
+    FB4.Value = append(FB4.Value, as.character(Reproduction_File))  # record file used
     Day <- Reproduction[,1] # Days
     Reproduction <- Reproduction[,2]  # Just use the Temp values, which are in column 2
     last_day <- tail(Day, n = 1)  # get the total number of days
@@ -537,7 +592,12 @@ EnDen.est = EnDen(Fat.g,Pro.g,W.0)  # J/g wet weight
 
 ########################################################################
 ### Contaminant Accumulation 
-########################################################################  
+########################################################################
+FB4.Param = append(FB4.Param, "calc.contaminant")
+FB4.Value = append(FB4.Value, as.logical(calc.contaminant))
+# "Init_Pred-conc", "Contam_EQ",
+# as.logical(calc.contaminant), In.Pred_Conc,            In.CONTEQ,
+
 # CONTEQ == 1: only food uptake; No clearance, no water uptake; Same as contaminant EQ 1 in FB3.
 #
 # CONTEQ == 2; only food uptake; Yes to clearance, no water uptake; clearance = f(T,W); 
@@ -550,13 +610,11 @@ EnDen.est = EnDen(Fat.g,Pro.g,W.0)  # J/g wet weight
 #
 #
 # default concentrations are (micrograms/g), parts per million
-X_Pred <- input$init_pred_conc  # initial contaminant conc in fish (micrograms/g), parts per million
-CONTEQ <- input$cont_acc
 #
 #For testing:
 # CONTEQ = 3  # model of Arnot & Gobas (2004)
 #
-# Parameters and equations for the contaminant model of Arnot & Gobas (2004)
+# Parameters and equations for the contaminant model of Arnot & Gobas (2004):
 #
 # Test model using values from Stadnicka et al. () Supporting Information, Table S2.
 # "Pentachlorobenzene"; logKow:5.17; O2:8.87 mg/L; T:15C; W:250 g; time:105 d; Cw:0.0000093 mg/L; Cfinal:0.22 ug/g
@@ -564,7 +622,7 @@ CONTEQ <- input$cont_acc
 input_cont.name = "Pentachlorobenzene"
 cont.name = input_cont.name
 #
-input_logKow = 5.17  # log10(Octanol:water partition coeff) of the contaminant; test using log Kow = 5.0
+input_logKow = 5.17  # log10(Octanol:water partition coeff) of the contaminant; test using log Kow = 5.17
 logKow = input_logKow
 Kow = 10**logKow
 #
@@ -596,33 +654,39 @@ globalout_Trans_eff <-NULL
 if(calc.contaminant==TRUE){
   # only read these contaminant files if calc.contaminant==TRUE
   # Concentrations in fish are micrograms/g, or parts per million
-  Prey_conc <- read.csv(Prey_conc_File,head=TRUE,stringsAsFactors = FALSE)
+  Prey_conc <- read.csv(Prey_conc_File,head=TRUE, stringsAsFactors = FALSE)
   Day_conc <- Prey_conc[,1] # Days
-  Prey_ass <- read.csv(Contam_assim_File,head=TRUE,stringsAsFactors = FALSE)
+  Prey_ass <- read.csv(Contam_assim_File,head=TRUE, stringsAsFactors = FALSE)
   Day_Prey_ass <- Prey_ass[,1] # Days
-  Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE,stringsAsFactors = FALSE)
+  Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE, stringsAsFactors = FALSE)
   Day_Trans_eff <- Trans_eff[,1] # Days
   prey_items <- (ncol(Prey_conc))-1
   last_day_conc <- tail(Day_conc, n = 1)  # get the total number of days
   last_day_prey_ass <- tail(Day_Prey_ass, n = 1)  # get the total number of days
   last_day_trans_eff <- tail(Day_Trans_eff, n=1)
-  
+  FB4.Param = append(FB4.Param, c("Prey_conc_File","Contam_assim_File","Contam_trans_eff_File"))
+  FB4.Value = append(FB4.Value, c(as.character(Prey_conc_File),
+                                      as.character(Contam_assim_File),
+                                      as.character(Contam_trans_eff_File)))  # record files used
+  FB4.Param = append(FB4.Param, c("Init_Pred-conc", "Contam_EQ"))
+  FB4.Value = append(FB4.Value, c(In.Pred_Conc, In.CONTEQ))  # record initial value & equation
+
   for(i in 1:prey_items){
     Prey_Conc <- Prey_conc[,i+1]
     Prey_Conc <- approx(Day_conc,Prey_Conc, n = last_day_conc,method="linear")$y # interpolate prey 1 energy density
     Prey_Conc <- Prey_Conc[First_day:Last_day]
     globalout_Prey_Conc <- cbind(globalout_Prey_Conc,Prey_Conc)
-    Prey_conc <- read.csv(Prey_conc_File,head=TRUE,stringsAsFactors = FALSE)
+    Prey_conc <- read.csv(Prey_conc_File,head=TRUE, stringsAsFactors = FALSE)
     Prey_ass <- Prey_ass[,i+1]  
     Prey_ass <- approx(Day_Prey_ass,Prey_ass, n = last_day_prey_ass,method="constant")$y # interpolate prey 1 energy density
     Prey_ass <- Prey_ass[First_day:Last_day]
     globalout_Prey_ass <- cbind(globalout_Prey_ass,Prey_ass)
-    Prey_ass <- read.csv(Contam_assim_File,head=TRUE,stringsAsFactors = FALSE)
+    Prey_ass <- read.csv(Contam_assim_File,head=TRUE, stringsAsFactors = FALSE)
     Trans_eff <- Trans_eff[,i+1]  
     Trans_eff <- approx(Day_Trans_eff,Trans_eff, n = last_day_trans_eff,method="constant")$y # interpolate prey 1 energy density
     Trans_eff <- Trans_eff[First_day:Last_day]
     globalout_Trans_eff <- cbind(globalout_Trans_eff,Trans_eff)
-    Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE,stringsAsFactors = FALSE)
+    Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE, stringsAsFactors = FALSE)
   }
 
   colnames(globalout_Prey_Conc) <- names(Prey_conc)[-1]
@@ -633,13 +697,13 @@ if(calc.contaminant==TRUE){
 pred_cont_conc_old <- function(C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,CONTEQ) {
   # used in testing version of FB4; only two CONTEQ's.
   Burden <- X_Pred*W
-  Kx <- ifelse(CONTEQ==2,exp(0.066*Temperature-0.2*log(W)-6.56)/1.5,0)
+  Kx <- ifelse(CONTEQ==2, exp(0.066*Temperature-0.2*log(W)-6.56)/1.5, 0)
   Uptake <- ifelse(CONTEQ == 1,sum(C*X_Prey*TEx),sum(C*X_Prey*X_ae))
   Clearance <- ifelse(CONTEQ==2,Kx*Burden,0)
   Accumulation <- Uptake-Clearance
   Burden <- ifelse(CONTEQ == 1,Burden+Uptake,Burden+Accumulation)
   X_Pred <- Burden/W  # Caution! Should calculate new Conc using "finalwt", not W; JEB
-  return(c(Clearance,Uptake,Burden,X_Pred))     
+  return(c(Clearance, Uptake, Burden, X_Pred))     
 }
 
 # Includes CONTEQ 3 for Arnot & Gobas (2004)
@@ -672,13 +736,21 @@ pred_cont_conc <- function(R.O2,C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,Ew,Kbw,CO
 ### Nutrient Regeneration
 ########################################################################
 
+FB4.Param = append(FB4.Param, "calc.nut")
+FB4.Value = append(FB4.Value, as.logical(calc.nut))
+
 if(calc.nut==TRUE){  # only need to read these files if "(calc.nut == TRUE)"
-  Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE,stringsAsFactors = FALSE)
+  Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE, stringsAsFactors = FALSE)
   Day_Phos_Ae <- Phos_Ae[,1] # Days
-  Phos_Conc_Pred <- read.csv(Phos_Conc_Pred_File,head=TRUE,stringsAsFactors = FALSE)
+  Phos_Conc_Pred <- read.csv(Phos_Conc_Pred_File,head=TRUE, stringsAsFactors = FALSE)
   Day_Phos_Conc_Pred <- Phos_Conc_Pred[,1] # Days
-  Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
+  Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE, stringsAsFactors = FALSE)
   Day_Phos_Conc_Prey <- Phos_Conc_Prey[,1] # Days
+  FB4.Param = append(FB4.Param, c("Phos_Ae_File","Phos_Conc_Pred_File","Phos_Conc_Prey_File"))
+  FB4.Value = append(FB4.Value, c(as.character(Phos_Ae_File),
+                                      as.character(Phos_Conc_Pred_File),
+                                      as.character(Phos_Conc_Prey_File)))  # record file used
+  
   
   prey_items_nut <- (ncol(Phos_Ae))-1
   
@@ -697,10 +769,15 @@ if(calc.nut==TRUE){  # only need to read these files if "(calc.nut == TRUE)"
   
   Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE,stringsAsFactors = FALSE)
   Day_Nit_Ae <- Nit_Ae[,1] # Days
-  Nit_Conc_Pred <- read.csv(Nit_Conc_Pred_File,head=TRUE,stringsAsFactors = FALSE)
+  Nit_Conc_Pred <- read.csv(Nit_Conc_Pred_File,head=TRUE, stringsAsFactors = FALSE)
   Day_Nit_Conc_Pred <- Nit_Conc_Pred[,1] # Days
-  Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
+  Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE, stringsAsFactors = FALSE)
   Day_Nit_Conc_Prey <- Nit_Conc_Prey[,1] # Days
+  FB4.Param = append(FB4.Param, c("Nit_Ae_File","Nit_Conc_Pred_File","Nit_Conc_Prey_File"))
+  FB4.Value = append(FB4.Value, c(as.character(Nit_Ae_File),
+                                      as.character(Nit_Conc_Pred_File),
+                                      as.character(Nit_Conc_Prey_File)))  # record file used
+  
   
   prey_items_nut <- (ncol(Nit_Ae))-1
   
@@ -722,25 +799,25 @@ if(calc.nut==TRUE){  # only need to read these files if "(calc.nut == TRUE)"
     Phos_Ae <- approx(Day_Phos_Ae,Phos_Ae, n = last_day_Phos_Ae,method="linear")$y # interpolate prey 1 energy density
     Phos_Ae <- Phos_Ae[First_day:Last_day]
     globalout_Phos_Ae <- cbind(globalout_Phos_Ae,Phos_Ae)
-    Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE,stringsAsFactors = FALSE)
+    Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE, stringsAsFactors = FALSE)
     
     Phos_Conc_Prey <- Phos_Conc_Prey[,i+1]  
     Phos_Conc_Prey <- approx(Day_Phos_Conc_Prey,Phos_Conc_Prey, n = last_day_Phos_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
     Phos_Conc_Prey <- Phos_Conc_Prey[First_day:Last_day]
     globalout_Phos_Conc_Prey <- cbind(globalout_Phos_Conc_Prey,Phos_Conc_Prey)
-    Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
+    Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE, stringsAsFactors = FALSE)
     
     Nit_Ae <- Nit_Ae[,i+1]
     Nit_Ae <- approx(Day_Nit_Ae,Nit_Ae, n = last_day_Nit_Ae,method="linear")$y # interpolate prey 1 energy density
     Nit_Ae <- Nit_Ae[First_day:Last_day]
     globalout_Nit_Ae <- cbind(globalout_Nit_Ae,Nit_Ae)
-    Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE,stringsAsFactors = FALSE)
+    Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE, stringsAsFactors = FALSE)
     
     Nit_Conc_Prey <- Nit_Conc_Prey[,i+1]  
     Nit_Conc_Prey <- approx(Day_Nit_Conc_Prey,Nit_Conc_Prey, n = last_day_Nit_Conc_Prey,method="constant")$y # interpolate prey 1 energy density
     Nit_Conc_Prey <- Nit_Conc_Prey[First_day:Last_day]
     globalout_Nit_Conc_Prey <- cbind(globalout_Nit_Conc_Prey,Nit_Conc_Prey)
-    Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
+    Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE, stringsAsFactors = FALSE)
   }
   
   colnames(globalout_Phos_Ae) <- names(Phos_Ae)[-1]
@@ -1126,74 +1203,103 @@ if(fit.to=="Ration"){
   rownames(W1.p) <- NULL
 }
 
+  
 time.Elapsed <- proc.time() - time.Start # elapsed time # added by JEB
+names(time.Elapsed) <- NULL  # remove the names
+  
+#----------------------------------------------------------------------------------------
+# Prepare summary; add to list of input values, and write log file.
+#
+# Check whether p-value is near an extreme value.
+if(p < 0.0000002){  # Because of binary search method, lowest p-value is not quite zero.
+  Pmsg1 <- "Warning! p-value at lower limit. Model could not fit user-specified final weight."
+  p.OK = FALSE
+}else if(p >= 4.9999998){  # Because of binary search method, highest p-value is not quite 5
+  Pmsg1 <- "Warning! p-value at upper limit. Model could not fit user-specified final weight."
+  p.OK = FALSE
+}else{
+  Pmsg1 = NA
+  p.OK = TRUE
+}
+# Format items for output
+p.t <- ifelse(input$fitto=="Ration" || input$fitto=="Ration_prey",NA,format(round(p,4), nsmall = 3))
+Growth <- format(round(W1.p[(input$FD-input$ID+1),4],3), nsmall = 3)
+Consom <- format(round(sum(W1.p[,"Specific.Consumption.Rate.g.g.d"]*W1.p[,"Starting.Weight"]),3), nsmall = 3)
+time.Run <- format(round(time.Elapsed[3],3), nsmall = 3) # 3rd value of proc.time() is total elapsed time
+# Check for energy balance
+ED.start <- pred_En_D(W=Init_W,day=1,PREDEDEQ=PREDEDEQ) # initial predator energy density (J/g) on day 1
+BodyE.start <- Init_W*ED.start # initial total body energy (J)
+W.final  <- W1.p[(input$FD-input$ID+1),4]   # final weight (g)
+ED.final <- W1.p[(input$FD-input$ID+1),16]  # final energy density (J/g)
+BodyE.final <- W.final*ED.final  # Final total body energy (J) = Final weight (g) * final ED (J/g)
+TotEgain <- W1.p[(input$FD-input$ID+1),27]  # total energy gain (J)
+TotSpawnE <- W1.p[(input$FD-input$ID+1),23]  # total energy lost in spawning (J)
+# TotSpawnE is total energy lost at spawning; value from globalout
+EStartGain <- BodyE.start + TotEgain - TotSpawnE  # Initial Body E + Egains - Elosses, all in Joules
+ErelDiff <- abs(EStartGain - BodyE.final)/BodyE.final  # Relative absolute difference in E budget
+Etol1 <- 0.000001  # Allowable relative error in energy budget
+Emsg1 <- ifelse(ErelDiff < Etol1, "OK. Energy budget balanced.", "Warning! Energy budget not balanced!")
+EB.OK <- ifelse(ErelDiff < Etol1, TRUE, FALSE)
+E.relDiff.f <- format(round(ErelDiff,10), nsmall = 3)  # relative difference from E balance
+# end of check for energy balance; now add messages
+if(EB.OK) {   # Energy budget balanced within tolerance
+  Emsg1 <- "OK. Energy budget balanced."
+  Parameter <- c("p-value","Total consumption (g)","Final weight (g)","Run time (s)",Emsg1) 
+  Value <- c(p.t, Consom, Growth, time.Run, E.relDiff.f)
+} else {      # Energy budget not balanced within tolerance
+  Emsg1 <- "Warning! Energy budget not balanced!"
+  E.Diff <- BodyE.start + TotEgain - TotSpawnE - BodyE.final  # Difference in E budget
+  E.Diff.f <- format(round(E.Diff,3), nsmall = 3)  # Difference from E balance (J)
+  Emsg2 <- ifelse(E.Diff < 0, "Warning! Missing joules in energy budget!", "Warning! Extra joules in energy budget!")
+  Parameter <- c("p-value","Total consumption (g)","Final weight (g)","Run time (s)",Emsg1,Emsg2)
+  Value <- c(p.t, Consom, Growth, time.Run, E.relDiff.f, E.Diff.f)
+}    
+if(p.OK == FALSE){
+  Parameter = append(Parameter, Pmsg1)
+  Value     = append(Value, p.t)
+}
+# Create a data frame from the Summary output values
+FB4.Summary <- as.data.frame(cbind(Parameter, Value)) # , include.rownames=FALSE)
+
+# Append the output summary to the input values
+FB4.Param <- append(FB4.Param, Parameter)  # append output names  to input names
+FB4.Value <- append(FB4.Value,     Value)  # append output values to input values
+# Write (append) the FB4 Log file in the current log_file directory as two rows
+nP <- length(FB4.Param)
+write(FB4.Param[2:nP], file=FB4_Log_File, ncolumns= nP-1, append = TRUE, sep = "," )
+write(FB4.Value[2:nP], file=FB4_Log_File, ncolumns= nP-1, append = TRUE, sep = "," )
+# Create a data frame for the Console version of the Log File, from both input and summary values
+FB4.Log0 <- as.data.frame(cbind(FB4.Param, FB4.Value), stringsAsFactors = FALSE)
+row.names(FB4.Log0) <- seq(1:nrow(FB4.Log0))  # Use numbers for row names
+print(FB4.Log0)  # print to the RStudio Console
+# End of Summary preparation and writing Log file
+#----------------------------------------------------------------------------------------
+# End of Model Run, Summary preparation, and writing Log file  
+
 
 ########################################################################
 ### Outputs
 ########################################################################
 
+
+
   output$summary <- renderTable({ 
     Model()
     parms <- read.csv("Parameters_official.csv",stringsAsFactors = FALSE) #  Read parameter values from .csv file
-    if(p < 0.0000002){  # Because of binary search method, lowest p-value is not quite zero.
-      Pmsg1 <- "Warning! p-value at lower limit. Model could not fit user-specified final weight."
-      p.OK = FALSE
-    }else if(p >= 4.9999998){  # Because of binary search method, highest p-value is not quite five.
-      Pmsg1 <- "Warning! p-value at upper limit. Model could not fit user-specified final weight."
-      p.OK = FALSE
-    }else{
-      Pmsg1 = NA
-      p.OK = TRUE
-    }
-    p.t <- ifelse(input$fitto=="Ration" || input$fitto=="Ration_prey",NA,format(round(p,4), nsmall = 3))
-    Growth <- format(round(W1.p[(input$FD-input$ID+1),4],3), nsmall = 3)
-    Consom <- format(round(sum(W1.p[,"Specific.Consumption.Rate.g.g.d"]*W1.p[,"Starting.Weight"]),3), nsmall = 3)
-    time.Run <- format(round(time.Elapsed[3],3), nsmall = 3) # 3rd value is total elapsed time JEB
-    # Check for energy balance; JEB
-    ED.start <- pred_En_D(W=Init_W,day=1,PREDEDEQ=PREDEDEQ) # initial predator energy density (J/g) on day 1
-    BodyE.start <- Init_W*ED.start # initial total body energy (J); JEB
-    W.final  <- W1.p[(input$FD-input$ID+1),4]   # final weight (g); JEB
-    ED.final <- W1.p[(input$FD-input$ID+1),16]  # final energy density (J/g); JEB
-    BodyE.final <- W.final*ED.final  # Final total body energy (J) = Final weight (g) * final ED (J/g)
-    TotEgain <- W1.p[(input$FD-input$ID+1),27]  # total energy gain (J);  JEB
-    TotSpawnE <- W1.p[(input$FD-input$ID+1),23]  # total energy lost in spawning (J);  JEB
-    # TotSpawnE is total energy lost at spawning; value from globalout; JEB
-    EStartGain <- BodyE.start + TotEgain - TotSpawnE  # Initial Body E + Egains - Elosses, all in Joules; JEB
-    ErelDiff <- abs(EStartGain - BodyE.final)/BodyE.final  # Relative absolute difference in E budget; JEB
-    Etol1 <- 0.000001  # Allowable relative error in energy budget; JEB
-    Emsg1 <- ifelse(ErelDiff < Etol1, "OK. Energy budget balanced.", "Warning! Energy budget not balanced!") # JEB
-    EB.OK <- ifelse(ErelDiff < Etol1, TRUE, FALSE) # JEB
-    E.relDiff.f <- format(round(ErelDiff,10), nsmall = 3)  # relative difference from E balance; JEB
-    # end of check for energy balance; JEB
-    if(EB.OK) {   # Energy budget balanced within tolerance; JEB
-      Emsg1 <- "OK. Energy budget balanced."  # JEB
-      Parameter <- c("p-value","Total consumption (g)","Final weight (g)","Run time (s)",Emsg1) # JEB
-      Value <- c(p.t, Consom, Growth, time.Run, E.relDiff.f) # added time.Run, E.relDiff, E.Diff.f;  JEB
-    } else {      # Energy budget not balanced within tolerance; JEB
-      Emsg1 <- "Warning! Energy budget not balanced!"  # JEB
-      E.Diff <- BodyE.start + TotEgain - TotSpawnE - BodyE.final  # Difference in E budget; JEB
-      E.Diff.f <- format(round(E.Diff,3), nsmall = 3)  # Difference from E balance (J); JEB
-      Emsg2 <- ifelse(E.Diff < 0, "Warning! Missing joules in energy budget!", "Warning! Extra joules in energy budget!") # JEB
-      Parameter <- c("p-value","Total consumption (g)","Final weight (g)","Run time (s)",Emsg1,Emsg2) # JEB
-      Value <- c(p.t, Consom, Growth, time.Run, E.relDiff.f, E.Diff.f) # added time.Run, E.relDiff, E.Diff.f;  JEB
-    }    
-    if(p.OK == FALSE){
-      Parameter = append(Parameter, Pmsg1)
-      Value     = append(Value, p.t)
-    }
-    as.data.frame(cbind(Parameter,Value))
-  
-  },include.rownames=FALSE)
+    # Show just the summary output values in the browser's "Summary" window.
+    FB4.Summary  # 
+  },include.rownames=FALSE)  ############# end of output$summary <- renderTable({}) ###########
   
    W1.p 
 
-})
+})  ##############  end of model <- reactive({})  ##################################################
 
   output$table <- renderTable({
     W1.p <- Model() 
     #cumsum(W1.p[,c("Cum.Gross.Production.g")])
     newdata = data.frame(W1.p[c(seq(1,(input$FD-input$ID+1),input$int)),c(input$var1,input$var2,input$var3,input$var4)]) 
     newdata
+    # write log file here.
   },include.rownames=FALSE)
 
 output$downloadData <- downloadHandler(
@@ -1236,7 +1342,7 @@ output$parameters <- renderTable({
 
 output$temp <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
-  Last_day    <- input$FD             ### Last day of the simulation
+  Last_day    <- input$FD             ### Last  day of the simulation
   Temperature <- read.csv(Temperature_File,stringsAsFactors = FALSE) #  Read daily Temp values from .csv file
   Day <- Temperature[,1] # Days
   Temperature <- Temperature[,2]  # Just use the Temp values, which are in column 2
@@ -1250,7 +1356,7 @@ output$temp <- renderPlot({
 
 output$diet_prop <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
-  Last_day    <- input$FD             ### Last day of the simulation
+  Last_day    <- input$FD             ### Last  day of the simulation
   Diet_prop <- read.csv(Diet_prop_File,head=TRUE,stringsAsFactors = FALSE)
   Day_prey <- Diet_prop[,1] # Days
   prey_items <- (ncol(Diet_prop))-1
@@ -1276,7 +1382,7 @@ output$diet_prop <- renderPlot({
 
 output$prey_ED <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
-  Last_day    <- input$FD             ### Last day of the simulation
+  Last_day    <- input$FD             ### Last  day of the simulation
   Prey_E <- read.csv(Prey_E_File,head=TRUE,stringsAsFactors = FALSE)
   Day_Prey_E <- Prey_E[,1] # Days
   prey_items <- (ncol(Prey_E))-1
@@ -1302,7 +1408,7 @@ output$prey_ED <- renderPlot({
 
 output$indigest_prey <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
-Last_day    <- input$FD             ### Last day of the simulation
+Last_day    <- input$FD             ### Last  day of the simulation
 Sp <- input$spec  # Species chosen
 EGEQ <- parms[Sp,"EGEQ"] ### equation used for egestion
 if(EGEQ == 3) {
@@ -1361,7 +1467,7 @@ output$pred_ED <- renderPlot({
   
   if(PREDEDEQ == 1) {  # Use Predator Energy Density values specified in the csv table; JEB
     First_day   <- input$ID             ### First day of the simulation
-    Last_day    <- input$FD             ### Last day of the simulation  
+    Last_day    <- input$FD             ### Last  day of the simulation  
     Predator_E <- read.csv(Predator_E_File,head=TRUE,stringsAsFactors = FALSE) 
     Day_pred <- Predator_E[,1] # Days
     Pred_E <- Predator_E[,2]  # Just use the predator energy values, which are in column 2
@@ -1393,7 +1499,7 @@ output$pred_ED <- renderPlot({
 
 output$mort <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
-Last_day    <- input$FD             ### Last day of the simulation    
+Last_day    <- input$FD             ### Last  day of the simulation    
 Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
 Day_mort <- Mortality[,1] # Days
 mort_types <- (ncol(Mortality))-1
@@ -1435,7 +1541,7 @@ globalout_mort <- cbind(First_day:Last_daym,globalout_mort,globalout_mort_prob)
 
 output$pop <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
-Last_day    <- input$FD             ### Last day of the simulation      
+Last_day    <- input$FD             ### Last  day of the simulation      
 Mortality <- read.csv(Mortality_File,head=TRUE,stringsAsFactors = FALSE)
 Day_mort <- Mortality[,1] # Days
 mort_types <- (ncol(Mortality))-1
@@ -1500,7 +1606,7 @@ if(last_day_mort < Last_day){text(ave(globalout_individuals[,1]),0.8*max(globalo
 output$repro <- renderPlot({
   Reproduction <- read.csv(Reproduction_File,head=TRUE,stringsAsFactors = FALSE)
   First_day   <- input$ID             ### First day of the simulation
-  Last_day    <- input$FD             ### Last day of the simulation   
+  Last_day    <- input$FD             ### Last  day of the simulation   
   Day <- Reproduction[,1] # Days
   Reproduction <- Reproduction[,2]  # Just use the Reprod values, which are in column 2
   last_day <- tail(Day, n = 1)  # get the total number of days
@@ -1515,7 +1621,7 @@ output$repro <- renderPlot({
 
 output$cont_ae <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
-Last_day    <- input$FD             ### Last day of the simulation     
+Last_day    <- input$FD             ### Last  day of the simulation     
 Prey_ass <- read.csv(Contam_assim_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Prey_ass <- Prey_ass[,1] # Days
 prey_items <- (ncol(Prey_ass))-1
@@ -1545,7 +1651,7 @@ legend("topleft",col=2:(prey_items+1),lty=1,legend=colnames(globalout_Prey_ass),
 
 output$prey_cont_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
-Last_day    <- input$FD             ### Last day of the simulation       
+Last_day    <- input$FD             ### Last  day of the simulation       
 Prey_conc <- read.csv(Prey_conc_File,head=TRUE,stringsAsFactors = FALSE)
 Day_conc <- Prey_conc[,1] # Days
 prey_items <- (ncol(Prey_conc))-1
@@ -1575,7 +1681,7 @@ colnames(globalout_Prey_Conc) <- names(Prey_conc)[-1]
 
 output$trans_eff <- renderPlot({
   First_day   <- input$ID             ### First day of the simulation
-  Last_day    <- input$FD             ### Last day of the simulation      
+  Last_day    <- input$FD             ### Last  day of the simulation      
   Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE,stringsAsFactors = FALSE)
   Day_Trans_eff <- Trans_eff[,1] # Days
   prey_items <- (ncol(Trans_eff))-1
@@ -1604,7 +1710,7 @@ output$trans_eff <- renderPlot({
 })  
 output$phos_ae <- renderPlot({ 
 First_day   <- input$ID             ### First day of the simulation
-Last_day    <- input$FD             ### Last day of the simulation     
+Last_day    <- input$FD             ### Last  day of the simulation     
 Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Ae <- Phos_Ae[,1] # Days
 prey_items_nut <- (ncol(Phos_Ae))-1
@@ -1633,7 +1739,7 @@ colnames(globalout_Phos_Ae) <- names(Phos_Ae)[-1]
 
 output$pred_phos_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
-Last_day    <- input$FD             ### Last day of the simulation       
+Last_day    <- input$FD             ### Last  day of the simulation       
 Phos_Conc_Pred <- read.csv(Phos_Conc_Pred_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Conc_Pred <- Phos_Conc_Pred[,1] # Days
 last_day_Phos_Conc_Pred <- tail(Day_Phos_Conc_Pred, n = 1)  # get the total number of days
@@ -1650,7 +1756,7 @@ colnames(globalout_Phos_Conc_Pred) <- names(Phos_Conc_Pred)[-1]
 
 output$prey_phos_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
-Last_day    <- input$FD             ### Last day of the simulation       
+Last_day    <- input$FD             ### Last  day of the simulation       
 Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Phos_Conc_Prey <- Phos_Conc_Prey[,1] # Days
 prey_items_nut <- (ncol(Phos_Conc_Prey))-1
@@ -1679,7 +1785,7 @@ colnames(globalout_Phos_Conc_Prey) <- names(Phos_Conc_Prey)[-1]
 
 output$nit_ae <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
-Last_day    <- input$FD             ### Last day of the simulation     
+Last_day    <- input$FD             ### Last  day of the simulation     
 Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Ae <- Nit_Ae[,1] # Days
 prey_items_nut <- (ncol(Nit_Ae))-1
@@ -1708,7 +1814,7 @@ colnames(globalout_Nit_Ae) <- names(Nit_Ae)[-1]
 
 output$pred_nit_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
-Last_day    <- input$FD             ### Last day of the simulation    
+Last_day    <- input$FD             ### Last  day of the simulation    
 Nit_Conc_Pred <- read.csv(Nit_Conc_Pred_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Conc_Pred <- Nit_Conc_Pred[,1] # Days
 last_day_Nit_Conc_Pred <- tail(Day_Nit_Conc_Pred, n = 1)  # get the total number of days
@@ -1725,7 +1831,7 @@ colnames(globalout_Nit_Conc_Pred) <- names(Nit_Conc_Pred)[-1]
 
 output$prey_nit_conc <- renderPlot({
 First_day   <- input$ID             ### First day of the simulation
-Last_day    <- input$FD             ### Last day of the simulation      
+Last_day    <- input$FD             ### Last  day of the simulation      
 Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE,stringsAsFactors = FALSE)
 Day_Nit_Conc_Prey <- Nit_Conc_Prey[,1] # Days
 prey_items_nut <- (ncol(Nit_Conc_Prey))-1
