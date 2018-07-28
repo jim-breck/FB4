@@ -2,7 +2,7 @@
 
 You can download the latest version of FB4 by clicking a button on this web page. The FB4 software, User Manual, and sample input files are all in the same zipped file. Instructions for getting started are in the User Manual (included in the zip file) and are also summarized below.
 
-We are today (1/7/2017) releasing Version 1.0.3 of the FB4 software. Details for this minor update are explained at the bottom of this page. 
+We are today (1/7/2018) releasing Version 1.0.3 of the FB4 software. Details for this minor update are explained at the bottom of this page. 
 
 FB4 v1.0.2 was released on 12/13/2017
 FB4 v1.0.1 was released on 12/6/2017.
@@ -103,7 +103,7 @@ It is also possible to visualize the outputs in a plot format. To do so, select 
 Finally, by selecting the __Summary__ tab, you will be able to see the final weight, consumption and p-value calculated or used for the simulation. Keep in mind that the p-value is irrelevant if you choose to run a simulation using the __Fit to: Ration__ option.
 
 ### FB4 versions:
-- __Latest version: FB4 v1.0.3__, was released 1/7/2017. Click the "Download .zip" button at the top of this page to obtain this latest version. This minor update adds the creation of a log file (FB4_Log_File.csv), which is written to the current directory after each run. After the file is first created, information from subsequent runs is appended to the previous file. This log file records the date-time, program version, input values, file names used for the simulation run, and summary output values. These input and output values are also printed to the RStudio Console. If you open FB4_Log_File.csv in Excel to see the values, be sure to close the file before doing another run, or else you will get an error: R will not be able to write (append) new information to the log file while it is open in Excel.
+- __Latest version: FB4 v1.0.3__, was released 1/7/2018. Click the "Download .zip" button at the top of this page to obtain this latest version. This minor update adds the creation of a log file (FB4_Log_File.csv), which is written to the current directory after each run. After the file is first created, information from subsequent runs is appended to the previous file. This log file records the date-time, program version, input values, file names used for the simulation run, and summary output values. These input and output values are also printed to the RStudio Console. If you open FB4_Log_File.csv in Excel to see the values, be sure to close the file before doing another run, or else you will get an error: R will not be able to write (append) new information to the log file while it is open in Excel.
 
 - FB4 v1.0.2 was released 12/13/2017. This minor update includes checks to avoid reading some additional input files that are not needed for a particular run. The Mortality input file is not read unless that sub-model is selected. Reproduction file is not read unless that sub-model is selected. If the last day of values in these two files are less than the Final Day of the simulation entered in Initial Values, then a caution message is displayed on the Sub-Model graph to remind the user there may be a problem unless more days are added to the file. The purpose of these changes is to help prevent file errors for new users, who may delete files or forget to update files they don't think they need.
 
