@@ -5,8 +5,11 @@ You can download the latest version of FB4 by clicking a button on this web page
 We are today (10/31/2018) releasing Version 1.1.0 of the FB4 software. Details for this update are explained at the bottom of this page. 
 
 FB4 v1.0.3 was released on 1/7/2018.
-FB4 v1.0.2 was released on 12/13/2017
+
+FB4 v1.0.2 was released on 12/13/2017.
+
 FB4 v1.0.1 was released on 12/6/2017.
+
 FB4 v1.0.0 was released on 12/1/2017.
 
 The Open Access article by [Deslauriers et al. (2017)](http://dx.doi.org/10.1080/03632415.2017.1377558) gives an introduction to this R-based modeling application.
