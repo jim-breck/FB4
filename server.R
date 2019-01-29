@@ -1,10 +1,11 @@
 require(shiny)
 
-# Fish Bioenergetics Model 4, version v1.1.0
-FB4.version = "v1.1.0"  # This version (v1.1.0) adds a Design file, to set up multiple runs.
-# Also, increased decimals for output of p-value from 4 to 6 decimal places.
-# Also, combined Res and SDA to estimate g O2/g for use in contaminant modeling.
-# Also, added warnings if fish weight becomes negative or program can't calculate weight at end of day.
+# Fish Bioenergetics Model 4, version v1.1.1
+FB4.version = "v1.1.1"  # This version (v1.1.1) fixes a bug to allow use of the "Download Table" button.
+# The previous version (v1.1.0) added an option for use of a Design file, to set up multiple runs;
+# also, increased decimals for output of p-value from 4 to 6 decimal places.
+# also, combined Res and SDA to estimate g O2/g for use in contaminant modeling.
+# also, added warnings if fish weight becomes negative or program can't calculate weight at end of day.
 #  
 FB4.File_dir = getwd()  # Remember the file directory for this session
 
@@ -16,6 +17,7 @@ parms <- read.csv("Parameters_official.csv",stringsAsFactors = FALSE) #  Read pa
 #Design_File = "FB4_Design_Example_5.csv"     # Design file for Example 5; ~2 seconds for 2 runs
 #Design_File = "FB4_Design_Examples_1-4.csv"  # Design file for Examples 1-4; ~26 seconds for all runs
 #Design_File = "FB4_Design_Bluegill_1.csv"    # Design file for Bluegill: 10 g at 30C, 1 day, eat 0.5 g inverts
+#Design_File = "FB4_Design_Bluegill_2.csv"    # Design file for Bluegill: 10 g at 30C (then 25C, then 20C), 1 day, eat 0.5 g inverts
 #Design_File = "FB4_Design_Check_Trout.csv"   # Design file to test several salmonid models
 #Design_File = "FB4_Design_Test_96_Models.csv"  # Design file to test that 96 models run; ~131 seconds
 ## See Line 53 to set UseDesignFile to TRUE or FALSE; This will eventually be done in Shiny: Initial Settings
@@ -50,7 +52,7 @@ shinyServer(function(input, output,session) {
   
   Model <- reactive({
 
-    UseDesignFile <- FALSE # TRUE  ### Did user specify a Design file?
+    UseDesignFile <- FALSE # TRUE # ## Did user specify a Design file?
     
     Design.time.Start <- proc.time() # start clock to time all Design_File runs
     
@@ -1506,7 +1508,6 @@ names(D.time) <- c("Parameter","Value")
     W1.p <- Model() 
     nFin = nrow(W1.p)  ## rows of output
     #cumsum(W1.p[,c("Cum.Gross.Production.g")])
-    #newdata = data.frame(W1.p[c(seq(1,(input$FD-input$ID+1),input$int)),c(input$var1,input$var2,input$var3,input$var4)]) 
     newdata = data.frame(W1.p[c(seq(1,nFin,input$int)),c(input$var1,input$var2,input$var3,input$var4)]) 
     newdata
   },include.rownames=FALSE)
@@ -1516,8 +1517,7 @@ output$downloadData <- downloadHandler(
   content = function(file) {
     W1.p <- Model()
     nFin = nrow(W1.p)  ## rows of output
-    #write.csv(data.frame(W1.p[c(seq(1,(input$FD-input$ID+1),input$int)),c(input$var1,input$var2,input$var3,input$var4)]), file)
-    write.csv(data.frame(W1.p[c(seq(1,Fin,input$int)),c(input$var1,input$var2,input$var3,input$var4)]), file)
+    write.csv(data.frame(W1.p[c(seq(1,nFin,input$int)),c(input$var1,input$var2,input$var3,input$var4)]), file)
   }
 )
 
