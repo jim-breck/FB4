@@ -16,7 +16,7 @@ FB4 v1.0.1 was released on 12/6/2017.
 
 FB4 v1.0.0 was released on 12/1/2017.
 
-The Open Access article by [Deslauriers et al. (2017)](http://dx.doi.org/10.1080/03632415.2017.1377558) gives an introduction to this R-based modeling application.
+The Open Access article by [Deslauriers et al. (2017)](https://doi.org/10.1080/03632415.2017.1377558) gives an introduction to this R-based modeling application.
 
 There are two main goals of this website:
 - First, to make the current bioenergetics software available and easy to use;
