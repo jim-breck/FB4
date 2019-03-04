@@ -1,10 +1,10 @@
 require(shiny)
 
-# Fish Bioenergetics Model 4, version v1.1.1
-FB4.version = "v1.1.1"  # This version (v1.1.1) fixes a bug to allow use of the "Download Table" button.
+# Fish Bioenergetics Model 4, version v1.1.2
+FB4.version = "v1.1.2"  # This version (v1.1.2) fixes a bug that stopped the program during p-fitting if
+# W became negative; now, the program prints a message to the Console and continues with the p-fitting.
+# The previous version (v1.1.1) fixed a bug to allow use of the "Download Table" button.
 # The previous version (v1.1.0) added an option for use of a Design file, to set up multiple runs;
-# also, increased decimals for output of p-value from 4 to 6 decimal places.
-# also, combined Res and SDA to estimate g O2/g for use in contaminant modeling.
 # also, added warnings if fish weight becomes negative or program can't calculate weight at end of day.
 #  
 FB4.File_dir = getwd()  # Remember the file directory for this session
@@ -336,7 +336,7 @@ shinyServer(function(input, output,session) {
     ### Function to Print Message if problem detected 
     ########################################################################
     
-    prt.msg <- function(run, day, wt, waterT, msg.num, msg.loc) {
+    prt.msg <- function(run, day, wt, waterT, p, outpt, msg.num, msg.loc) {
       # prt.msg(nR,i,W,Temperature[i],0)  # example of using this function
       if(msg.num == 1) {
         print("Error in calculating weight at end of the day.")
@@ -345,11 +345,12 @@ shinyServer(function(input, output,session) {
         print("Error in calculating weight at end of the day.")
         print("Number inside sqrt is negative. Fish lost too much weight.")
       }else if(msg.num == 3) {
+        if(outpt == "End") {print("While fitting the p-value, ")}
         print("Fish weight became negative at end of this day.")
       }
       # Create a data frame for the Console version of the Error message
-      FB4.Err.Param <- c("Run","Day","W(g)","T(C)","Msg.number","Msg.location")
-      FB4.Err.Value <- c(run, day, wt, waterT, msg.num, msg.loc)
+      FB4.Err.Param <- c("Run","Day","W(g)","T(C)","p-value","Msg.number","Msg.location")
+      FB4.Err.Value <- c(run, day, wt, waterT, p, msg.num, msg.loc)
       FB4.Err.Log <- as.data.frame(cbind(FB4.Err.Param, FB4.Err.Value), stringsAsFactors = FALSE)
       row.names(FB4.Err.Log) <- seq(1:nrow(FB4.Err.Log))  # Use numbers for row names
       print(FB4.Err.Log)  # print to the RStudio Console
@@ -504,8 +505,8 @@ shinyServer(function(input, output,session) {
           if(W < Wco){    # weight (W) at start of day is below cutoff.
             if(beta1 != 0){  # use quadratic formula to calc finalwt
               flagvalue1 <- ((alpha1*alpha1 +4*beta1*(W*(alpha1+beta1*W) +egain -SpawnE)))
-              if(is.na(flagvalue1)){prt.msg(nR,i,W,Temperature[i],1,1);warning("fv1: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
-              }else if(flagvalue1 < 0){prt.msg(nR,i,W,Temperature[i],2,2);warning("fv1: Number inside sqrt is negative. Fish lost too much weight.")}
+              if(is.na(flagvalue1)){prt.msg(nR,i,W,Temperature[i],p,outpt,1,1);warning("fv1: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
+              }else if(flagvalue1 < 0){prt.msg(nR,i,W,Temperature[i],p,outpt,2,2);warning("fv1: Number inside sqrt is negative. Fish lost too much weight.")}
               finalwt <- (-alpha1 +sqrt(alpha1*alpha1 +4*beta1*(W*(alpha1+beta1*W) +egain -SpawnE)))/(2*beta1)
             }else if(beta1 == 0){  # can't use quadratic formula; ED = alpha1
               finalwt = (egain -SpawnE +W*alpha1)/alpha1
@@ -514,8 +515,8 @@ shinyServer(function(input, output,session) {
               egainCo = Wco*(alpha1+beta1*Wco) - W*(alpha1+beta1*W)  # energy needed to reach cutoff from W < Wco
               if(beta2 != 0){  # accounting for energy needed to reach cutoff and beyond, calc new wt
                 flagvalue2 <- (alpha2*alpha2 +4*beta2*(egain-SpawnE -egainCo +Wco*(alpha1+beta1*Wco)))
-                if(is.na(flagvalue2)){prt.msg(nR,i,W,Temperature[i],1,3);warning("fv2: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
-                }else if(flagvalue2 < 0){prt.msg(nR,i,W,Temperature[i],2,4);warning("fv2: Number inside sqrt is negative. Fish lost too much weight.")}
+                if(is.na(flagvalue2)){prt.msg(nR,i,W,Temperature[i],p,outpt,1,3);warning("fv2: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
+                }else if(flagvalue2 < 0){prt.msg(nR,i,W,Temperature[i],p,outpt,2,4);warning("fv2: Number inside sqrt is negative. Fish lost too much weight.")}
                 finalwt = (-alpha2 +sqrt(alpha2*alpha2 +4*beta2*(egain-SpawnE -egainCo +Wco*(alpha1+beta1*Wco))))/(2*beta2)
               }else if(beta2 == 0){  # then grow to cutoff, with ED = alpha2 beyond cutoff
                 finalwt = (egain-SpawnE -egainCo +Wco*(alpha1+beta1*Wco))/alpha2
@@ -524,8 +525,8 @@ shinyServer(function(input, output,session) {
           }else if(W >= Wco){   # weight (W) at start of day is above cutoff.
             if(beta2 != 0){  # use quadratic formula to calc finalwt
               flagvalue3 <- ((alpha2*alpha2 +4*beta2*(W*(alpha2+beta2*W) +egain -SpawnE)))
-              if(is.na(flagvalue3)){prt.msg(nR,i,W,Temperature[i],1,5);warning("fv3: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
-              }else if(flagvalue3 < 0){prt.msg(nR,i,W,Temperature[i],2,6);warning("fv3: Number inside sqrt is negative. Fish lost too much weight.")}
+              if(is.na(flagvalue3)){prt.msg(nR,i,W,Temperature[i],p,outpt,1,5);warning("fv3: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
+              }else if(flagvalue3 < 0){prt.msg(nR,i,W,Temperature[i],p,outpt,2,6);warning("fv3: Number inside sqrt is negative. Fish lost too much weight.")}
               finalwt <- (-alpha2 +sqrt(alpha2*alpha2 +4*beta2*(W*(alpha2+beta2*W) +egain -SpawnE)))/(2*beta2)
             }else if(beta2 == 0){  # can't use quadratic formula; ED = alpha1
               finalwt = (egain -SpawnE +W*alpha2)/alpha2
@@ -534,8 +535,8 @@ shinyServer(function(input, output,session) {
               elossCo = W*(alpha2+beta2*W) - Wco*(alpha1+beta1*Wco)  # energy loss needed to reach cutoff from W
               if(beta1 != 0){  # accounting for energy to reach cutoff and beyond, calc new weight
                 flagvalue4 <- (alpha1*alpha1 +4*beta1*(egain-SpawnE +elossCo +Wco*(alpha1+beta1*Wco)))
-                if(is.na(flagvalue4)){prt.msg(nR,i,W,Temperature[i],1,7);warning("fv4: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
-                }else if(flagvalue4 < 0){prt.msg(nR,i,W,Temperature[i],2,8);warning("fv4: Number inside sqrt is negative. Fish lost too much weight.")}
+                if(is.na(flagvalue4)){prt.msg(nR,i,W,Temperature[i],p,outpt,1,7);warning("fv4: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
+                }else if(flagvalue4 < 0){prt.msg(nR,i,W,Temperature[i],p,outpt,2,8);warning("fv4: Number inside sqrt is negative. Fish lost too much weight.")}
                 partwt1 = sqrt(alpha1*alpha1 +4*beta1*(egain-SpawnE +elossCo +Wco*(alpha1+beta1*Wco)))
                 finalwt = (-alpha1 +partwt1)/(2*beta1)
                 testfinalwt = finalwt
@@ -551,7 +552,8 @@ shinyServer(function(input, output,session) {
         }
         
         # finalwt is Predator weight (g) at end of current day
-        if(finalwt < 0){prt.msg(nR,i,finalwt,Temperature[i],3,10)}  # print msg if weight becomes negative.
+        if(finalwt < 0){prt.msg(nR,i,finalwt,Temperature[i],p,outpt,3,10)}  # print msg if weight becomes negative.
+        if(finalwt < 0){W <- finalwt; break}  # break out of daily "for" loop; (Skip p-values that let W go negative.)
         
         weightgain  <-  finalwt-W  	#change in g/day
         
@@ -648,7 +650,7 @@ shinyServer(function(input, output,session) {
         #W <- finalwt-(spawn*finalwt) # spawning loss is accounted for earlier
         W <- finalwt  # Weight at the end of the day serves as the starting weight for the next day
         Ind <- Ind2                
-      }
+      } # end of "for" loop for days
       if(outpt != "End") {  # Daily values not needed if only fitting final weight or cons
         globalout[,c("Cum.Gross.Production.g","Cum.Gross.Production.J","Cum.Net.Production.g","Cum.Net.Production.J","Cum.Cons.g","Cum.Cons.J","Cum.Cons.Pop.g","Cum.Cons.Pop.J")] <- 
           cumsum( globalout[,c("Cum.Gross.Production.g","Cum.Gross.Production.J","Cum.Net.Production.g","Cum.Net.Production.J","Cum.Cons.g","Cum.Cons.J","Cum.Cons.Pop.g","Cum.Cons.Pop.J")])
