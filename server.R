@@ -1,12 +1,12 @@
 require(shiny)
 
-# Fish Bioenergetics Model 4, version v1.1.2
-FB4.version = "v1.1.2"  # This version (v1.1.2) fixes a bug that stopped the program during p-fitting if
+# Fish Bioenergetics Model 4, version v1.1.3
+FB4.version = "v1.1.3"  # This version (v1.1.3) fixes an error in reporting Specific.Growth.Rate.g.g.d.
+# The previous version (v1.1.2) fixed a bug that stopped the program during p-fitting if
 # W became negative; now, the program prints a message to the Console and continues with the p-fitting.
-# The previous version (v1.1.1) fixed a bug to allow use of the "Download Table" button.
-# The previous version (v1.1.0) added an option for use of a Design file, to set up multiple runs;
+# Version (v1.1.1) fixed a bug to allow use of the "Download Table" button.
+# Version (v1.1.0) added an option for use of a Design file, to set up multiple runs;
 # also, added warnings if fish weight becomes negative or program can't calculate weight at end of day.
-#  
 FB4.File_dir = getwd()  # Remember the file directory for this session
 
 # Bioenergetics parameters, by species
@@ -261,13 +261,13 @@ shinyServer(function(input, output,session) {
       return(F.g)
     }
     # Estimate energy density from Fat and Protein content
-    EnDen = function(Fat,Pro,W){
+    EnDen = function(Fat, Pro, W){
       ED = (Fat.g*36200 + Pro.g*23600)/W  # J/g wet weight
       return(ED)
     }
     
     ########################################################################
-    ### Contminant accumulation functions
+    ### Contaminant accumulation functions
     ########################################################################
     
     pred_cont_conc_old <- function(C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,CONTEQ) {
@@ -599,14 +599,14 @@ shinyServer(function(input, output,session) {
           globalout[i,"Specific.Respiration.Rate.J.g.d"]<-Res ## row 11
           globalout[i,"Specific.SDA.Rate.J.g.d"]<-SpecDA      ## row 12
           globalout[i,"Specific.Consumption.Rate.g.g.d"]<-Cons/mean_prey_ED # (g/g) ## row 13
-          globalout[i,"Specific.Growth.Rate.g.g.d"]<-G/mean_prey_ED            ## row 14
+          globalout[i,"Specific.Growth.Rate.g.g.d"]<-weightgain/W # G/pred_E_iplusone ## row 14; fixed in v1.1.3; JEB(was G/mean_prey_ED)
           globalout[i,"Initial.Predator.Energy.Density.J.g"]<-Pred_E_i         ## row 15
           globalout[i,"Final.Predator.Energy.Density.J.g"]<-Pred_E_iplusone    ## row 16
           globalout[i,"Mean.Prey.Energy.Density.J.g"]<-mean_prey_ED  # (J/g)   ## row 17
           globalout[i,"Gross.Production.g"]<-(Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i ## row 18
-          globalout[i,"Gross.Production.J"]<-(Cons +Res + Eg + Ex + SpecDA)*W           ## row 19
+          globalout[i,"Gross.Production.J"]<-(Cons + Res + Eg + Ex + SpecDA)*W          ## row 19
           globalout[i,"Cum.Gross.Production.g"]<-cumsum((Cons + Res + Eg + Ex + SpecDA)*W/Pred_E_i) ## row 20
-          globalout[i,"Cum.Gross.Production.J"]<-cumsum((Cons +Res + Eg + Ex + SpecDA)*W) ## row 21
+          globalout[i,"Cum.Gross.Production.J"]<-cumsum((Cons + Res + Eg + Ex + SpecDA)*W) ## row 21
           globalout[i,"Gametic.Production.g"]<-spawn*W  # (g); JEB; was spawn*finalwt   ## row 22
           globalout[i,"Cum.Gametic.Production.J"]<-TotSpawnE # (J); Cumulative energy (J) for spawning; ## row 23
           globalout[i,"Net.Production.g"]<-weightgain  # includes spawning losses; JEB  ## row 24

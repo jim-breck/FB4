@@ -1,6 +1,6 @@
 ﻿## Welcome to Fish Bioenergetics 4.0
 
-You have downloaded FB4, version v1.1.2. (March 4, 2019)
+You have downloaded FB4, version v1.1.3. (May 26, 2021) (March 4, 2019)
  
 The FB4 software, User Manual, and sample input files are all in the same zipped file. Instructions for getting started are in the User Manual (included in the zip file) and are also summarized below.
 
@@ -92,7 +92,9 @@ It is also possible to visualize the outputs in a plot format. To do so, select 
 Finally, by selecting the __Summary__ tab, you will be able to see the final weight, consumption and p-value calculated or used for the simulation. Keep in mind that the p-value is irrelevant if you choose to run a simulation using the __Fit to: Ration__ option.
 
 ### FB4 versions:
-- __Latest version: FB4 v1.1.2__. was released 3/4/2019. Click the "Download .zip" button at the top of the web page to obtain the latest version. This version fixes a bug that stopped the program during p-fitting if weight became negative; now, the program prints a message to the Console and continues with the p-fitting.
+- __Latest version: FB4 v1.1.3__. was released 5/26/2021. Click the "Download .zip" button at the top of the web page to obtain the latest version. This version fixes an error in the reporting of Specific.Growth.Rate.g.g.d. Thanks to Steve Blumenshine for identifying and reporting this error.
+
+- __FB4 v1.1.2__. was released 3/4/2019. Click the "Download .zip" button at the top of the web page to obtain the latest version. This version fixes a bug that stopped the program during p-fitting if weight became negative; now, the program prints a message to the Console and continues with the p-fitting.
 
 - __FB4 v1.1.1__, was released 1/28/2019. This version has two minor changes. The first change fixes a bug that had prevented use of the "Download Table" button when a run is completed. Thanks to Nick Barrett for assistance with this fix. The second change is to add another Design File ("FB4_Design_Bluegill_2.csv") and two Temperature files that it uses (Main Inputs/Temperature_20C.csv, and Main Inputs/Temperature_25C.csv). See the note for v1.1.0 for a brief explanation of how to use Design Files.
 
