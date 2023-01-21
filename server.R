@@ -1,16 +1,24 @@
 require(shiny)
 
 # Fish Bioenergetics Model 4, version v1.1.3
-FB4.version = "v1.1.3"  # This version (v1.1.3) fixes an error in reporting Specific.Growth.Rate.g.g.d.
-# The previous version (v1.1.2) fixed a bug that stopped the program during p-fitting if
-# W became negative; now, the program prints a message to the Console and continues with the p-fitting.
+FB4.version = "v1.1.4"  # This version (v1.1.4) allows final W from one run
+#  to be used as the starting W for the next run, when using a Design File.
+# Version (v1.1.3) fixes an error in reporting Specific.Growth.Rate.g.g.d.
+# Version (v1.1.2) fixed a bug that stopped the program during p-fitting if
+#  W became negative; now, the program prints a message to the Console and continues with the p-fitting.
 # Version (v1.1.1) fixed a bug to allow use of the "Download Table" button.
 # Version (v1.1.0) added an option for use of a Design file, to set up multiple runs;
-# also, added warnings if fish weight becomes negative or program can't calculate weight at end of day.
+#  also, added warnings if fish weight becomes negative or program can't calculate weight at end of day.
 FB4.File_dir = getwd()  # Remember the file directory for this session
 
 # Bioenergetics parameters, by species
-parms <- read.csv("Parameters_official.csv",stringsAsFactors = FALSE) #  Read parameter values from .csv file
+parm_File <- "Parameters_official.csv"
+if(file.exists(parm_File)){
+  parms <- read.csv(parm_File,stringsAsFactors = FALSE) #  Read parameter values from .csv file
+} else {
+  print(paste("Cannot find parameter file -- parm_File: ", parm_File))
+  exit()  # If cannot find parm_File, then browser window reports error and closes.
+}
 
 # Design file
 #Design_File = "FB4_Design_Example_1.csv"     # Design file for Example 1
@@ -18,9 +26,11 @@ parms <- read.csv("Parameters_official.csv",stringsAsFactors = FALSE) #  Read pa
 #Design_File = "FB4_Design_Examples_1-4.csv"  # Design file for Examples 1-4; ~26 seconds for all runs
 #Design_File = "FB4_Design_Bluegill_1.csv"    # Design file for Bluegill: 10 g at 30C, 1 day, eat 0.5 g inverts
 #Design_File = "FB4_Design_Bluegill_2.csv"    # Design file for Bluegill: 10 g at 30C (then 25C, then 20C), 1 day, eat 0.5 g inverts
+#Design_File = "FB4_Design_Bluegill_pop_change_mort.csv" # Design file to test fitting options
+#Design_File = "FB4_Design_Check_fit-options.csv" # Design file to test fitting options
 #Design_File = "FB4_Design_Check_Trout.csv"   # Design file to test several salmonid models
 #Design_File = "FB4_Design_Test_96_Models.csv"  # Design file to test that 96 models run; ~131 seconds
-## See Line 53 to set UseDesignFile to TRUE or FALSE; This will eventually be done in Shiny: Initial Settings
+## See Line 69 to set UseDesignFile to TRUE or FALSE; This may eventually be done in Shiny: Initial Settings
 
 #   Main Input files
 Temperature_File = "Main Inputs/Temperature.csv" # Temperature (deg C), over time
@@ -52,13 +62,15 @@ shinyServer(function(input, output,session) {
   
   Model <- reactive({
 
-    UseDesignFile <- FALSE # TRUE # ## Did user specify a Design file?
+    UseDesignFile <- TRUE # FALSE # TRUE # ## Did user specify a Design file?
     
     Design.time.Start <- proc.time() # start clock to time all Design_File runs
     
     ########################################################################
     ### Define functions (before Run-loop)  
-
+    
+    exit <- function() { invokeRestart("abort") }
+    
     ########################################################################
     ### Consumption models
     ########################################################################
@@ -317,10 +329,10 @@ shinyServer(function(input, output,session) {
       p.max  <- 5.00  # current max
       p.min  <- 0.00  # current min
       outpt <- "End"  # desire only ending weight or consumption value, not full vector; revised by JEB
+      fit_p_Flag <- FALSE # at start, no fit has been found
       withProgress(message = 'Calculating ...', min=0, max=max.iter, value = 0, {  # revised by JEB
         # initialize W.p
         W.p <- grow(Temperature, W, p, outpt,globalout_Prey, globalout_Prey_E)
-        
         while((n.iter <= max.iter) & (abs(W.p-FW) > W.tol)) {
           n.iter <- n.iter + 1
           incProgress(1, detail = paste("Doing iteration", n.iter))  # added by JEB
@@ -329,7 +341,8 @@ shinyServer(function(input, output,session) {
           W.p <- grow(Temperature, W, p, outpt,globalout_Prey, globalout_Prey_E)
         }
       })  # end of "withProgress" function; added by JEB
-      return(p) (g)
+      if(abs(W.p-FW) <= W.tol) {fit_p_Flag <- TRUE} # adequate fit has been reached
+      return(c(p, fit_p_Flag)) (g)  ## fit_p_Flag added by JEB
     }  # end of fit.p function
     
     ########################################################################
@@ -347,6 +360,9 @@ shinyServer(function(input, output,session) {
       }else if(msg.num == 3) {
         if(outpt == "End") {print("While fitting the p-value, ")}
         print("Fish weight became negative at end of this day.")
+      }else if(msg.num == 4) {
+        if(outpt == "End") {print("While fitting the p-value, ")}
+        print("Could not determine an adequate p-value to fit the desired value.")
       }
       # Create a data frame for the Console version of the Error message
       FB4.Err.Param <- c("Run","Day","W(g)","T(C)","p-value","Msg.number","Msg.location")
@@ -649,7 +665,7 @@ shinyServer(function(input, output,session) {
         # TotSpawnE is total energy lost at spawning; value now calculated earlier and passed in globalout; JEB
         #W <- finalwt-(spawn*finalwt) # spawning loss is accounted for earlier
         W <- finalwt  # Weight at the end of the day serves as the starting weight for the next day
-        Ind <- Ind2                
+        Ind <- Ind2   # N at end of the day (Ind2) is the starting N (Ind) for the next day             
       } # end of "for" loop for days
       if(outpt != "End") {  # Daily values not needed if only fitting final weight or cons
         globalout[,c("Cum.Gross.Production.g","Cum.Gross.Production.J","Cum.Net.Production.g","Cum.Net.Production.J","Cum.Cons.g","Cum.Cons.J","Cum.Cons.Pop.g","Cum.Cons.Pop.J")] <- 
@@ -676,10 +692,15 @@ shinyServer(function(input, output,session) {
     
   if(UseDesignFile){      ### If using values from a Design file...
     # Read Design file
-    design <- read.csv(Design_File, stringsAsFactors = FALSE, header=TRUE) # Read Design file
-    NRuns  <- nrow(design)    ### Find number of runs included in the design file
-    RunMsg <- 'Design File running ...'
-  } else {
+    if(file.exists(Design_File)){
+      design <- read.csv(Design_File, stringsAsFactors = FALSE, header=TRUE) # Read Design file
+      NRuns  <- nrow(design)    ### Find number of runs included in the design file
+      RunMsg <- 'Design File running ...'
+    } else {
+      print(paste("UseDesignFile == TRUE, but cannot find Design_File: ", Design_File))
+      exit()
+    }
+  } else {     # if not using Design file...
     NRuns <- 1
     RunMsg <- 'Model running ...'
   } 
@@ -693,16 +714,18 @@ shinyServer(function(input, output,session) {
     incProgress(1, detail = paste("Doing Run ", nR,": ", Run_Name))  # added by JEB
     Sp       <- design[nR,"Species_Num"] ### Species: corresponding row number in Parameters-official.csv
     fit.to   <- design[nR,"fit.to"]      ### Fit to either final weight, consumption, ration(g), ration(%) or p-value
-    Init_W   <- design[nR,"Initial_W"]   ### Initial weight in g wet weight
+    d.Init_W <- design[nR,"Initial_W"]   ### Initial weight in g wet weight
+    Init_W   <- ifelse(is.na(d.Init_W), W.final, d.Init_W) #### continue from previous W.final if Design File has NA for Init_W
     # The "fit.to.value" can represent different things, depending on "fit.to"
     Final_W  <- design[nR,"fit.to.value"] ### Final weight in g wet weight
     eaten    <- design[nR,"fit.to.value"] ### Total food eaten in g wet weight
     Ration_prey<-design[nR,"fit.to.value"] ### Daily food eaten in g wet weight
     Ration   <- design[nR,"fit.to.value"]/100 ### % of body weight eaten
-    p_value  <- design[nR,"fit.to.value"]     ### Proporation of Cmax eaten
+    p_value  <- design[nR,"fit.to.value"]     ### Proportion of Cmax eaten
     First_day<- design[nR,"First_day"]  ### First day of the simulation
     Last_day <- design[nR,"Last_day"]   ### Last day of the simulation
-    Ind      <- design[nR,"N_indiv"]    ### Number of individuals in the population
+    d.Ind    <- design[nR,"N_indiv"]    ### Number of individuals in the population
+    Ind      <- ifelse(is.na(d.Ind), N.final, d.Ind) #### continue from previous final N = N.final if Design File has NA for Ind
     Oxycal   <- design[nR,"Oxycal"]     ### Oxycalorific coefficient
     calc.pop_mort <- design[nR,"calc.pop_mort"]  ### Do mortality calcs? (TRUE/FALSE)
     # calc.pop_mort is used to avoid reading Mortality_File if not used
@@ -736,9 +759,19 @@ shinyServer(function(input, output,session) {
     Nit_Ae_File         = design[nR,"Nit_Ae_File"] # Predator's N assimilation efficiency, by prey type, over time
     Nit_Conc_Pred_File  = design[nR,"Nit_Co_Pred_File"] # N in predator (g N/g), over time
     Nit_Conc_Prey_File  = design[nR,"Nit_Co_Prey_File"] # N in prey (g N/g), by prey type, over time
-    #   Output file
+    ###   Output files
     FB4_Log_File        = design[nR,"FB4_Log_File"] # File to save values used in this run, and summary output.
-    
+    #     Daily_Output_File only written if Save_Daily_Output == TRUE
+    if("Save_Daily_Output" %in% colnames(design)) {   # may not be in old design files
+      Save_Daily_Output = design[nR,"Save_Daily_Output"]   # Save daily output to a file? (TRUE/FALSE) 
+    } else {
+      Save_Daily_Output = FALSE  
+    }
+    if("Daily_Output_File" %in% colnames(design)) {   # may not be in old design files
+      Daily_Output_File   = design[nR,"Daily_Output_File"]   # file for daily output values from this run
+    } else {
+      Daily_Output_File = "FB4_Default_Daily_Output_File.csv" # default File to save daily values
+    }
   } else {   ### Use values entered by User
   
     Run_Name <- "User run"   ### Short name for this run
@@ -749,7 +782,7 @@ shinyServer(function(input, output,session) {
     eaten       <- input$FinW           ### Total food eaten in g wet weight
     Ration_prey <- input$FinW           ### Daily food eaten in g wet weight
     Ration      <- input$FinW/100       ### % of body weight eaten
-    p_value     <- input$FinW           ### Proporation of Cmax eaten
+    p_value     <- input$FinW           ### Proportion of Cmax eaten
     First_day   <- input$ID             ### First day of the simulation
     Last_day    <- input$FD             ### Last day of the simulation
     Ind         <- input$ind            ### Number of individuals in the population
@@ -764,7 +797,8 @@ shinyServer(function(input, output,session) {
     # calc.contaminant is used to avoid reading the three contaminant files if not used
     X_Pred   <- input$init_pred_conc  # initial contaminant conc in fish (micrograms/g), parts per million
     CONTEQ   <- input$cont_acc        # Contaminant Equation (1, or 2); Equation 3 coming soon.
-    
+    Save_Daily_Output <- FALSE        ### Save Daily output to a file? (TRUE/FALSE)
+    Daily_Output_File = "FB4_Default_Daily_Output_File.csv" # default file name
   }  ## end of specifying input values
   
   Fin         <- Last_day-First_day+1 ### Number of days in simulation output
@@ -774,7 +808,7 @@ shinyServer(function(input, output,session) {
   ###########################################################################
   
   # Names of the input specifications:
-  FB4.Param0 <- c("--------",
+  FB4.Param0 <- c("---------",
                      "Date-Time",    "FB4.version", "FB4.File_dir", 
                      "FB4_Log_File", "Species_Num", "Species_txt",
                      "Values_from",  "Run_Name",
@@ -791,7 +825,7 @@ shinyServer(function(input, output,session) {
   vals.From    <- ifelse(UseDesignFile,          Design_File, "User input")
   
   # Values of the input specifications:
-  FB4.Value0 <- c(as.character("********"),
+  FB4.Value0 <- c(as.character("*********"),
                  as.character(date()),       as.character(FB4.version), as.character(FB4.File_dir), 
                  as.character(FB4_Log_File), Sp,                        as.character(parms[Sp,"Species"]),
                  vals.From,                  as.character(Run_Name),
@@ -818,13 +852,13 @@ shinyServer(function(input, output,session) {
   CK1 <- parms[Sp,"CK1"] ### small fraction of the maximum rate
   CK4 <- parms[Sp,"CK4"] ### reduced fraction of the maximum rate
   
-  if(CEQ == 2) {      ### Additional parameters neded if the consumption model 2 is used
+  if(CEQ == 2) {      ### Additional parameters needed if the consumption model 2 is used
     CY <- log(CQ) * (CTM - CTO + 2)
     CZ <- log(CQ) * (CTM - CTO)
     CX <- (CZ^2 * (1+(1+40/CY)^0.5)^2)/400
   }
   
-  if(CEQ == 3) {      ### Additional parameters neded if the consumption model 3 is used
+  if(CEQ == 3) {      ### Additional parameters needed if the consumption model 3 is used
     CG1 = (1/(CTO- CQ))*log((0.98*(1-CK1))/(CK1*0.02))
     CG2 = (1/(CTL-CTM))*log((0.98*(1-CK4))/(CK4*0.02))
   }
@@ -882,7 +916,12 @@ shinyServer(function(input, output,session) {
   ### Temperature 
   ########################################################################
 
-  Temperature <- read.csv(Temperature_File,stringsAsFactors = FALSE) #  Read daily Temp values from .csv file
+  if(file.exists(Temperature_File)){
+    Temperature <- read.csv(Temperature_File,stringsAsFactors = FALSE) #  Read daily Temp values from .csv file
+  } else {
+    print(paste("Cannot find Temperature_File: ",Temperature_File))
+    exit()
+  }
   Day <- Temperature[,1] # Days
   Temperature <- Temperature[,2]  # Just use the Temp values, which are in column 2
   last_day <- tail(Day, n = 1)  # get the total number of days
@@ -895,9 +934,19 @@ shinyServer(function(input, output,session) {
   ### Diet proportions and energetical contribution 
   ########################################################################
   
-  Diet_prop <- read.csv(Diet_prop_File,head=TRUE, stringsAsFactors = FALSE)
+  if(file.exists(Diet_prop_File)){
+    Diet_prop <- read.csv(Diet_prop_File,head=TRUE, stringsAsFactors = FALSE)
+  } else {
+    print(paste("Cannot find Diet_prop_File: ",Diet_prop_File))
+    exit()
+  }
   Day_prey <- Diet_prop[,1] # Days
-  Prey_E <- read.csv(Prey_E_File,head=TRUE, stringsAsFactors = FALSE)
+  if(file.exists(Prey_E_File)){
+    Prey_E <- read.csv(Prey_E_File,head=TRUE, stringsAsFactors = FALSE)
+  } else {
+    print(paste("Cannot find Prey_E_File: ",Prey_E_File))
+    exit()
+  }
   Day_Prey_E <- Prey_E[,1] # Days
   prey_items   <- (ncol(Diet_prop))-1  # number of prey items in Diet_prop file
   prey_items_E <- (ncol(Prey_E))-1     # number of prey items in Prey_E file
@@ -935,7 +984,12 @@ shinyServer(function(input, output,session) {
   
   if(EGEQ == 3) {  # Only read file if EGEQ == 3
     # Fraction of each prey type that are indigestible (See Stewart et al. 1983)
-    Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE, stringsAsFactors = FALSE)
+    if(file.exists(Indigestible_Prey_File)){
+      Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE, stringsAsFactors = FALSE)
+    } else {
+      print(paste("Cannot find Indigestible_Prey_File: ",Indigestible_Prey_File))
+      exit()
+    }
     FB4.Param = append(FB4.Param, "Indigestible_Prey")
     FB4.Value = append(FB4.Value, as.character(Indigestible_Prey_File))  # record file used
     Day_ind_prey <- Ind_prey[,1] # Days
@@ -965,7 +1019,12 @@ shinyServer(function(input, output,session) {
   FB4.Value = append(FB4.Value,  PREDEDEQ)  # record Predator Energy Density Equation used
   
   if(PREDEDEQ == 1) {
-    Predator_E <- read.csv(Predator_E_File,head=TRUE, stringsAsFactors = FALSE) 
+    if(file.exists(Predator_E_File)){
+      Predator_E <- read.csv(Predator_E_File,head=TRUE, stringsAsFactors = FALSE) 
+    } else {
+      print(paste("Cannot find Predator_E_File: ",Predator_E_File))
+      exit()
+    }
     FB4.Param = append(FB4.Param, "Predator_ED")
     FB4.Value = append(FB4.Value, as.character(Predator_E_File))  # record file used
     Day_pred <- Predator_E[,1] # Days
@@ -997,7 +1056,12 @@ shinyServer(function(input, output,session) {
   FB4.Param2 = ("calc.pop_mort")
   FB4.Value2 = (as.logical(calc.pop_mort))
   if(calc.pop_mort==TRUE){   # only read Mortality_File if needed
-    Mortality <- read.csv(Mortality_File,head=TRUE, stringsAsFactors = FALSE)
+    if(file.exists(Mortality_File)){
+      Mortality <- read.csv(Mortality_File,head=TRUE, stringsAsFactors = FALSE)
+    } else {
+      print(paste("Cannot find Mortality_File: ",Mortality_File))
+      exit()
+    }
     FB4.Param2 = append(FB4.Param2, "Mortality_File")
     FB4.Value2 = append(FB4.Value2,  as.character(Mortality_File))  # record file used
     Day_mort <- Mortality[,1] # Days
@@ -1064,7 +1128,12 @@ shinyServer(function(input, output,session) {
   FB4.Value2 = append(FB4.Value2, as.logical(calc.spawn))
   
   if(calc.spawn){
-    Reproduction <- read.csv(Reproduction_File,head=TRUE, stringsAsFactors = FALSE)
+    if(file.exists(Reproduction_File)){
+      Reproduction <- read.csv(Reproduction_File,head=TRUE, stringsAsFactors = FALSE)
+    } else {
+      print(paste("Cannot find Reproduction_File: ",Reproduction_File))
+      exit()
+    }
     FB4.Param2 = append(FB4.Param2, "Reproduction_File")
     FB4.Value2 = append(FB4.Value2, as.character(Reproduction_File))  # record file used
     Day <- Reproduction[,1] # Days
@@ -1171,11 +1240,26 @@ globalout_Trans_eff <-NULL
 if(calc.contaminant==TRUE){
   # only read these contaminant files if calc.contaminant==TRUE
   # Concentrations in fish are micrograms/g, or parts per million
-  Prey_conc <- read.csv(Prey_conc_File,head=TRUE, stringsAsFactors = FALSE)
+  if(file.exists(Prey_conc_File)){
+    Prey_conc <- read.csv(Prey_conc_File,head=TRUE, stringsAsFactors = FALSE)
+  } else {
+    print(paste("Cannot find Prey_conc_File: ",Prey_conc_File))
+    exit()
+  }
   Day_conc <- Prey_conc[,1] # Days
-  Prey_ass <- read.csv(Contam_assim_File,head=TRUE, stringsAsFactors = FALSE)
+  if(file.exists(Contam_assim_File)){
+    Prey_ass <- read.csv(Contam_assim_File,head=TRUE, stringsAsFactors = FALSE)
+  } else {
+    print(paste("Cannot find Contam_assim_File: ",Contam_assim_File))
+    exit()
+  }
   Day_Prey_ass <- Prey_ass[,1] # Days
-  Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE, stringsAsFactors = FALSE)
+  if(file.exists(Contam_trans_eff_File)){
+    Trans_eff <- read.csv(Contam_trans_eff_File,head=TRUE, stringsAsFactors = FALSE)
+  } else {
+    print(paste("Cannot find Contam_trans_eff_File: ",Contam_trans_eff_File))
+    exit()
+  }
   Day_Trans_eff <- Trans_eff[,1] # Days
   prey_items <- (ncol(Prey_conc))-1
   last_day_conc <- tail(Day_conc, n = 1)  # get the total number of days
@@ -1226,12 +1310,20 @@ FB4.Param2 = append(FB4.Param2, "calc.nut")
 FB4.Value2 = append(FB4.Value2, as.logical(calc.nut))
 
 if(calc.nut==TRUE){  # only need to read these files if "(calc.nut == TRUE)"
-  Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE, stringsAsFactors = FALSE)
+  if(file.exists(Phos_Ae_File)){
+    Phos_Ae <- read.csv(Phos_Ae_File,head=TRUE, stringsAsFactors = FALSE)
+  } else {
+    print(paste("Cannot find Phos_Ae_File: ",Phos_Ae_File))
+    exit()
+  }
   Day_Phos_Ae <- Phos_Ae[,1] # Days
-  Phos_Conc_Pred <- read.csv(Phos_Conc_Pred_File,head=TRUE, stringsAsFactors = FALSE)
+  if(file.exists(Phos_Conc_Pred_File)){
+    Phos_Conc_Pred <- read.csv(Phos_Conc_Pred_File,head=TRUE, stringsAsFactors = FALSE)
+  } else {
+    print(paste("Cannot find Phos_Conc_Pred_File: ",Phos_Conc_Pred_File))
+    exit()
+  }
   Day_Phos_Conc_Pred <- Phos_Conc_Pred[,1] # Days
-  Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE, stringsAsFactors = FALSE)
-  Day_Phos_Conc_Prey <- Phos_Conc_Prey[,1] # Days
   FB4.Param2 = append(FB4.Param2, c("Phos_Ae_File","Phos_Conc_Pred_File","Phos_Conc_Prey_File"))
   FB4.Value2 = append(FB4.Value2, c(as.character(Phos_Ae_File),
                                       as.character(Phos_Conc_Pred_File),
@@ -1253,11 +1345,19 @@ if(calc.nut==TRUE){  # only need to read these files if "(calc.nut == TRUE)"
   Phos_Conc_Pred <- Phos_Conc_Pred[First_day:Last_day]
   globalout_Phos_Conc_Pred <- cbind(globalout_Phos_Conc_Pred,Phos_Conc_Pred)
   
-  Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE,stringsAsFactors = FALSE)
+  if(file.exists(Nit_Ae_File)){
+    Nit_Ae <- read.csv(Nit_Ae_File,head=TRUE,stringsAsFactors = FALSE)
+  } else {
+    print(paste("Cannot find Nit_Ae_File: ",Nit_Ae_File))
+    exit()
+  }
   Day_Nit_Ae <- Nit_Ae[,1] # Days
-  Nit_Conc_Pred <- read.csv(Nit_Conc_Pred_File,head=TRUE, stringsAsFactors = FALSE)
-  Day_Nit_Conc_Pred <- Nit_Conc_Pred[,1] # Days
-  Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE, stringsAsFactors = FALSE)
+  if(file.exists(Nit_Conc_Pred_File)){
+    Nit_Conc_Pred <- read.csv(Nit_Conc_Pred_File,head=TRUE, stringsAsFactors = FALSE)
+  } else {
+    print(paste("Cannot find Nit_Conc_Pred_File: ",Nit_Conc_Pred_File))
+    exit()
+  }
   Day_Nit_Conc_Prey <- Nit_Conc_Prey[,1] # Days
   FB4.Param2 = append(FB4.Param2, c("Nit_Ae_File","Nit_Conc_Pred_File","Nit_Conc_Prey_File"))
   FB4.Value2 = append(FB4.Value2, c(as.character(Nit_Ae_File),
@@ -1333,16 +1433,29 @@ nitrogen_allocation <- function(C,n_conc_prey,AEn,weightgain,n_conc_pred) {
 }
 # end of nutrient regeneration
 
+########################################################################
+### Daily Output File:  record values used for this run
+########################################################################
+
+FB4.Param2 = append(FB4.Param2, "Save_Daily_Output")
+FB4.Value2 = append(FB4.Value2, as.logical(Save_Daily_Output))
+
+if(Save_Daily_Output) {
+  FB4.Param2 = append(FB4.Param2, "Daily_Output_File")
+  FB4.Value2 = append(FB4.Value2, as.character(Daily_Output_File))  # record file used
+} else {
+  FB4.Param2 = append(FB4.Param2, "Daily_Output_File")
+  FB4.Value2 = append(FB4.Value2,  "NA")  #  file not used
+}    
 
 ########################################################################
 ### binary search for p-value, needed values 
 ########################################################################
 
-  p <- 0.3 # Need some value to start the fitting process for p-value
-  W.tol  <- 0.0001  # Predicted W must be within W.tol of the specified W for an adequate p-fit.
-  max.iter <- 25 # Max number of iterations of binary search (increased from 20 to 25; JEB)
-  
-   
+p <- 0.3 # Need some value to start the fitting process for p-value
+W.tol  <- 0.0001  # Predicted W must be within W.tol of the specified W for an adequate p-fit.
+max.iter <- 25 # Max number of iterations of binary search (increased from 20 to 25; JEB)
+
 ########################################################################
 ### Model run 
 ########################################################################
@@ -1366,11 +1479,102 @@ if(fit.to=="Ration"){
 }else{ 
   FW <-ifelse(fit.to=="Weight",Final_W, eaten) # if fit.to=="Consumption", then set FW to the value of eaten
   p <- 0.5  
-  p <- fit.p(p,Init_W, FW, W.tol,max.iter) ###  fit.p(Init_W, FW, W.tol)
-  outpt <- "vector"
-  W1.p <- grow(Temperature=Temperature,W=Init_W,p=p,outpt="vector",globalout_Prey=globalout_Prey, globalout_Prey_E=globalout_Prey_E)
-  W1.p #<- cbind(W1.p,W2.p) 
-  rownames(W1.p) <- NULL
+  #p <- fit.p(p, Init_W, FW, W.tol, max.iter) ### 
+  p_Flag <- fit.p(p, Init_W, FW, W.tol, max.iter) ###  
+  p <- p_Flag[1]  # fit.p function now returns two values: c(p, fit_p_Flag), by JEB
+  fit_p_Flag <- p_Flag[2]
+  #
+  if(fit_p_Flag) {   ### found adequate value for p
+    outpt <- "vector"
+    W1.p <- grow(Temperature=Temperature,W=Init_W,p=p,outpt=outpt,globalout_Prey=globalout_Prey, globalout_Prey_E=globalout_Prey_E)
+    W1.p
+    rownames(W1.p) <- NULL
+    Pmsg1 = NA
+    p.OK = TRUE
+  } else {   ### did *not* find adequate value for p
+    # p-value out of tolerance
+    # Check whether p-value is near an extreme value.
+    if(p < 0.0000002){  # Because of binary search method, lowest p-value is not quite zero.
+      Pmsg1 <- "Error! p-value at lower limit. No fit."
+      p.OK = FALSE
+      msg.loc = 20
+    }else if(p >= 4.9999998){  # Because of binary search method, highest p-value is not quite 5
+      Pmsg1 <- "Error! p-value at upper limit. No fit."
+      p.OK = FALSE
+      msg.loc = 20
+    }
+    FB4.Err.Param <- c("Run","p-value","Message","Msg.location")
+    FB4.Err.Value <- c(nR, p, Pmsg1, msg.loc)
+    FB4.Err.Log <- as.data.frame(cbind(FB4.Err.Param, FB4.Err.Value), stringsAsFactors = FALSE)
+    row.names(FB4.Err.Log) <- seq(1:nrow(FB4.Err.Log))  # Use numbers for row names
+    print(FB4.Err.Log)  # print to the RStudio Console
+    outpt <- "End"
+    prt.msg(nR,1,Init_W,Temperature[1],p,outpt,4,19)  # print msg if fit.p didn't work.
+    # Don't complete this run, because fit.p didn't find an adequate fit.
+    # no useful W1.p was created (no final run), so create a 1-row data.frame
+    gout <- data.frame(matrix(0, nrow = 1, ncol= (53+ncol(globalout_Prey)*4))) # Create a 1-row dataframe
+    gout[1,1:4] <- c(0, Temperature[1], Init_W, Init_W)
+    colnames(gout) <- c("Day",
+                             "Temperature.C",
+                             "Starting.Weight",
+                             "Weight.g",
+                             "Population.Number",
+                             "Population.Biomass.g",
+                             "Specific.Growth.Rate.J.g.d",
+                             "Specific.Consumption.Rate.J.g.d",
+                             "Specific.Egestion.Rate.J.g.d",
+                             "Specific.Excretion.Rate.J.g.d",
+                             "Specific.Respiration.Rate.J.g.d",
+                             "Specific.SDA.Rate.J.g.d",
+                             "Specific.Consumption.Rate.g.g.d",
+                             "Specific.Growth.Rate.g.g.d",
+                             "Initial.Predator.Energy.Density.J.g",
+                             "Final.Predator.Energy.Density.J.g",
+                             "Mean.Prey.Energy.Density.J.g",
+                             "Gross.Production.g",
+                             "Gross.Production.J",
+                             "Cum.Gross.Production.g",
+                             "Cum.Gross.Production.J",
+                             "Gametic.Production.g",
+                             "Cum.Gametic.Production.J", # need total spawning E; JEB
+                             "Net.Production.g",
+                             "Net.Production.J",
+                             "Cum.Net.Production.g",
+                             "Cum.Net.Production.J",
+                             "Consumption.g", 
+                             "Consumption.J",
+                             "Cum.Cons.g", 
+                             "Cum.Cons.J",
+                             "Cons.Pop.g",
+                             "Cons.Pop.J",
+                             "Cum.Cons.Pop.g",
+                             "Cum.Cons.Pop.J",
+                             "Mortality.number",
+                             "Mortality.g",
+                             "Nitrogen.Egestion.g",
+                             "Phosphorous.Egestion.g",
+                             "N.to.P.Egestion",
+                             "Nitrogen.Excretion.g",
+                             "Phosphorous.Excretion.g",
+                             "N.to.P.Excretion",
+                             "Nitrogen.Consumption.g",
+                             "Phosphorous.Consumption.g",
+                             "N.to.P.Consumption",
+                             "Nitrogen.Growth.g",
+                             "Phosphorous.Growth.g",
+                             "N.to.P.Growth",
+                             "Contaminant.Clearance.Rate.ug.d",
+                             "Contaminant.Uptake.ug",
+                             "Contaminant.Burden.ug",
+                             "Contaminant.Predator.Concentration.ug.g",
+                             paste("Cons",colnames(globalout_Prey),"J", sep = " "),
+                             paste("Cons",colnames(globalout_Prey),"g", sep = " "),
+                             paste("Cons Pop",colnames(globalout_Prey),"J", sep = " "),
+                             paste("Cons Pop",colnames(globalout_Prey),"g", sep = " "))
+    W1.p <- gout  # use this 1-row data.frame as output because could not do run.
+    rownames(W1.p) <- NULL
+    W1.p
+  }  
 }
 
   
@@ -1382,10 +1586,10 @@ names(time.Elapsed) <- NULL  # remove the names
 #
 # Check whether p-value is near an extreme value.
 if(p < 0.0000002){  # Because of binary search method, lowest p-value is not quite zero.
-  Pmsg1 <- "Warning! p-value at lower limit. Model could not fit user-specified final weight."
+  Pmsg1 <- "Warning! p-value at lower limit. No fit."
   p.OK = FALSE
 }else if(p >= 4.9999998){  # Because of binary search method, highest p-value is not quite 5
-  Pmsg1 <- "Warning! p-value at upper limit. Model could not fit user-specified final weight."
+  Pmsg1 <- "Warning! p-value at upper limit. No fit."
   p.OK = FALSE
 }else{
   Pmsg1 = NA
@@ -1427,6 +1631,7 @@ time.Run <- format(round(time.Elapsed[3],3), nsmall = 3) # 3rd value of proc.tim
 ED.start <- pred_En_D(W=Init_W,day=1,PREDEDEQ=PREDEDEQ) # initial predator energy density (J/g) on day 1
 BodyE.start <- Init_W*ED.start # initial total body energy (J)
 W.final  <- W1.p[nFin,4]   # final weight (g)
+N.final  <- W1.p[nFin,5]   # final pop number
 ED.final <- W1.p[nFin,16]  # final energy density (J/g)
 BodyE.final <- W.final*ED.final  # Final total body energy (J) = Final weight (g) * final ED (J/g)
 TotEgain <- W1.p[nFin,27]  # total energy gain (J)
@@ -1471,7 +1676,17 @@ write(FB4.Value[2:nP], file=FB4_Log_File, ncolumns= nP-1, append = TRUE, sep = "
 FB4.Log0 <- as.data.frame(cbind(FB4.Param, FB4.Value), stringsAsFactors = FALSE)
 row.names(FB4.Log0) <- seq(1:nrow(FB4.Log0))  # Use numbers for row names
 print(FB4.Log0)  # print to the RStudio Console
-# End of Summary preparation and writing Log file
+# Save all daily output values (contained in W1.p), if Save_Daily_Output == TRUE
+if(Save_Daily_Output){     # if saving daily output...
+  RunNum = rep(nR, nrow(W1.p)) # make a vector with the run number
+  W2.p = cbind(RunNum, W1.p)  # add RunNum vector as the new first column
+  colnames(W2.p)[1] = "Run"
+  #nc.W2.p = length(W2.p)  # number of columns
+  #write.csv(W1.p, file=Daily_Output_File, append=TRUE) # save daily output to a file
+  #write.table(W2.p[,2:nc.W1.p], file=Daily_Output_File, row.names=FALSE, append=TRUE, sep = ",") # save daily output to a file
+  write.table(W2.p, file=Daily_Output_File, row.names=FALSE, append=TRUE, sep = ",") # save daily output to a file
+}
+# End of Summary preparation, writing Log file and writing daily output file.
 #----------------------------------------------------------------------------------------
 # End of Model Run, Summary preparation, and writing Log file  
 #
@@ -1798,7 +2013,7 @@ for(i in 1:(days-1)){
   fish_int_start <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i+1,fish_int_start)
 }
 
-Individuals <- input$ind
+Individuals <- input$ind  # <- Ind ?? or N.final ?? # JEB 
 globalout_individuals <- NULL
 
 for(i in 1:(Last_dm-First_day+1)){  ## changed Last_day to Last_dm, because Last_dm < Last_day in some cases
