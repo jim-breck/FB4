@@ -1,8 +1,8 @@
 require(shiny)
 
-# Fish Bioenergetics Model 4, version v1.1.3
-FB4.version = "v1.1.4"  # This version (v1.1.4) allows final W from one run
-#  to be used as the starting W for the next run, when using a Design File.
+# Fish Bioenergetics Model 4, version v1.1.4b
+FB4.version = "v1.1.4b"  # This version (v1.1.4b) sets the default value of UseDesignFile to FALSE.
+# Version (v1.1.4) allows final W from one run to be used as the starting W for the next run, when using a Design File.
 # Version (v1.1.3) fixes an error in reporting Specific.Growth.Rate.g.g.d.
 # Version (v1.1.2) fixed a bug that stopped the program during p-fitting if
 #  W became negative; now, the program prints a message to the Console and continues with the p-fitting.
@@ -62,7 +62,7 @@ shinyServer(function(input, output,session) {
   
   Model <- reactive({
 
-    UseDesignFile <- TRUE # FALSE # TRUE # ## Did user specify a Design file?
+    UseDesignFile <- FALSE # TRUE # ## Did user specify a Design file?
     
     Design.time.Start <- proc.time() # start clock to time all Design_File runs
     
