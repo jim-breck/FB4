@@ -1,7 +1,11 @@
 require(shiny)
 
-# Fish Bioenergetics Model 4, version v1.1.4b
-FB4.version = "v1.1.4b"  # This version (v1.1.4b) sets the default value of UseDesignFile to FALSE.
+# Fish Bioenergetics Model 4, version v1.1.6
+FB4.version = "v1.1.6"  # This version (v1.1.6) adds the option for behavioral thermoregulation.
+# Version (v1.1.6) adds the option for behavioral thermoregulation; if Design File has
+#  "Use_Thermoregulation" = TRUE, then fish avoids high T and moves to Thermoregulation_Temp.
+# Version (v1.1.5) adds the option to save daily output, by run, when using a Design File;
+#  This version (v1.1.5) sets the default value of UseDesignFile to FALSE.
 # Version (v1.1.4) allows final W from one run to be used as the starting W for the next run, when using a Design File.
 # Version (v1.1.3) fixes an error in reporting Specific.Growth.Rate.g.g.d.
 # Version (v1.1.2) fixed a bug that stopped the program during p-fitting if
@@ -24,6 +28,7 @@ if(file.exists(parm_File)){
 #Design_File = "FB4_Design_Example_1.csv"     # Design file for Example 1
 #Design_File = "FB4_Design_Example_5.csv"     # Design file for Example 5; ~2 seconds for 2 runs
 #Design_File = "FB4_Design_Examples_1-4.csv"  # Design file for Examples 1-4; ~26 seconds for all runs
+#Design_File = "FB4_Design_Bluegill_Thermoregulation.csv"  # Example using behavioral thermoregulation
 #Design_File = "FB4_Design_Bluegill_1.csv"    # Design file for Bluegill: 10 g at 30C, 1 day, eat 0.5 g inverts
 #Design_File = "FB4_Design_Bluegill_2.csv"    # Design file for Bluegill: 10 g at 30C (then 25C, then 20C), 1 day, eat 0.5 g inverts
 #Design_File = "FB4_Design_Bluegill_pop_change_mort.csv" # Design file to test fitting options
@@ -447,9 +452,13 @@ shinyServer(function(input, output,session) {
         if(calc.pop_mort==TRUE){ 
           Ind2 <- globalout_individuals[i,2] # Population mortality
         }else{
-          Ind2 <- 1
-          Ind <- 1
+          #Ind2 <- 1
+          #Ind <- 1    ## Ind is set by user or Design File
+          Ind2 <- Ind  ## Ind is set by user or Design File
         }
+        # specify today's water T
+        FishTemp_i = Temperature[i]  # Use specified water T, unless using behavioral thermoregulation
+        if(Use_Thermoregulation){FishTemp_i = min(Thermoregulation_Temp, Temperature[i])}
         
         Pred_E_i <- pred_En_D(W=W,day=i,PREDEDEQ=PREDEDEQ) # Predator energy density (J/g)
         Pred_E_iplusone <- pred_En_D(W=W,day=(i+1),PREDEDEQ=PREDEDEQ) # Predator energy density (J/g); only correct for PREDEDEQ==1
@@ -460,18 +469,18 @@ shinyServer(function(input, output,session) {
           # Calculate Consumption based on Ration, then use that to find the corresponding p-value for this day
           Cons.gg <- Ration  # units (g prey/g fish) per day
           Cons <- Ration*mean_prey_ED  # (J/g); Ration has units of (g prey)/(g fish); mean_prey_ED has units (J/g prey)
-          Cons_p1 <- consumption(Temperature=Temperature[i], W=W, p=1, CEQ=CEQ)*mean_prey_ED # Consumption in (J/g)
+          Cons_p1 <- consumption(Temperature=FishTemp_i, W=W, p=1, CEQ=CEQ)*mean_prey_ED # Consumption in (J/g)
           p <- Cons/Cons_p1  # Calculated daily p-value for this Ration
         } else if(fit.to == "Ration_prey") {
           # Calculate Consumption based on Ration_prey, then use that to find the corresponding p-value for this day
           Cons.gg <- Ration_prey/W  # units (g food/g fish), where Ration_prey is (g food) per day.
           Cons <- (Ration_prey/W)*mean_prey_ED  # (J/g) = ((g prey)/(g fish))*(J/g prey)
-          Cons_p1 <- consumption(Temperature=Temperature[i], W=W, p=1, CEQ=CEQ)*mean_prey_ED # Consumption in (J/g)
+          Cons_p1 <- consumption(Temperature=FishTemp_i, W=W, p=1, CEQ=CEQ)*mean_prey_ED # Consumption in (J/g)
           p <- Cons/Cons_p1  # Calculated daily p-value for this Ration_prey
         } else { 
           # Now, with p-value determined or specified, calculate Cons for this day
           #Cons.gg is the consumption (g prey/g fish), using T on day i, p-value, Weight, and the specified Consumption Equation number.
-          Cons.gg <- consumption(Temperature=Temperature[i], p=p, W=W, CEQ=CEQ)  # (g prey/g fish); only call once with these params; JEB
+          Cons.gg <- consumption(Temperature=FishTemp_i, p=p, W=W, CEQ=CEQ)  # (g prey/g fish); only call once with these params; JEB
           # Cons <- consumption(Temperature=Temperature[i],p=p, W=W, CEQ=CEQ)*mean_prey_ED # Consumption in (J/g)
           Cons <- Cons.gg*mean_prey_ED # Cons = Consumption in (J/g) ; units: (J/g) = (g prey/g fish)*(J/g prey)  # JEB
         }
@@ -490,10 +499,10 @@ shinyServer(function(input, output,session) {
           Cons_prey_pop_G <- data.frame(t(Cons.gg*(globalout_Prey[i,]*W*Ind))) # Population consumption by prey in g  # added by JEB
           colnames(Cons_prey_pop_G) <- paste(colnames(Cons_prey_pop_G),"pop.g", sep = " ")
         }
-        Eg  <- egestion(C=Cons,Temperature=Temperature[i],p=p, EGEQ=EGEQ) # Egestion in J/g
-        Ex  <- excretion(C=Cons, Eg=Eg,Temperature=Temperature[i], p=p, EXEQ=EXEQ) # Excretion in J/g
+        Eg  <- egestion(C=Cons,Temperature=FishTemp_i,p=p, EGEQ=EGEQ) # Egestion in J/g
+        Ex  <- excretion(C=Cons, Eg=Eg,Temperature=FishTemp_i, p=p, EXEQ=EXEQ) # Excretion in J/g
         SpecDA  <- SpDynAct(C=Cons,Eg=Eg) # Specific dynamic action in J/g 
-        Res  <- respiration(Temperature=Temperature[i], W=W, REQ)*Oxycal #  respiration in (J/g) = (g O2/g)*(J/g O2); Oxycal = 13560 J/g O2
+        Res  <- respiration(Temperature=FishTemp_i, W=W, REQ)*Oxycal #  respiration in (J/g) = (g O2/g)*(J/g O2); Oxycal = 13560 J/g O2
         R.O2 <- (Res + SpecDA)/Oxycal # respiration in (g O2/g); used in some contaminant models
         
         G <-  Cons - (Res + Eg + Ex + SpecDA) # Energy put towards growth in J/g
@@ -531,8 +540,8 @@ shinyServer(function(input, output,session) {
               egainCo = Wco*(alpha1+beta1*Wco) - W*(alpha1+beta1*W)  # energy needed to reach cutoff from W < Wco
               if(beta2 != 0){  # accounting for energy needed to reach cutoff and beyond, calc new wt
                 flagvalue2 <- (alpha2*alpha2 +4*beta2*(egain-SpawnE -egainCo +Wco*(alpha1+beta1*Wco)))
-                if(is.na(flagvalue2)){prt.msg(nR,i,W,Temperature[i],p,outpt,1,3);warning("fv2: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
-                }else if(flagvalue2 < 0){prt.msg(nR,i,W,Temperature[i],p,outpt,2,4);warning("fv2: Number inside sqrt is negative. Fish lost too much weight.")}
+                if(is.na(flagvalue2)){prt.msg(nR,i,W,FishTemp_i,p,outpt,1,3);warning("fv2: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
+                }else if(flagvalue2 < 0){prt.msg(nR,i,W,FishTemp_i,p,outpt,2,4);warning("fv2: Number inside sqrt is negative. Fish lost too much weight.")}
                 finalwt = (-alpha2 +sqrt(alpha2*alpha2 +4*beta2*(egain-SpawnE -egainCo +Wco*(alpha1+beta1*Wco))))/(2*beta2)
               }else if(beta2 == 0){  # then grow to cutoff, with ED = alpha2 beyond cutoff
                 finalwt = (egain-SpawnE -egainCo +Wco*(alpha1+beta1*Wco))/alpha2
@@ -541,8 +550,8 @@ shinyServer(function(input, output,session) {
           }else if(W >= Wco){   # weight (W) at start of day is above cutoff.
             if(beta2 != 0){  # use quadratic formula to calc finalwt
               flagvalue3 <- ((alpha2*alpha2 +4*beta2*(W*(alpha2+beta2*W) +egain -SpawnE)))
-              if(is.na(flagvalue3)){prt.msg(nR,i,W,Temperature[i],p,outpt,1,5);warning("fv3: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
-              }else if(flagvalue3 < 0){prt.msg(nR,i,W,Temperature[i],p,outpt,2,6);warning("fv3: Number inside sqrt is negative. Fish lost too much weight.")}
+              if(is.na(flagvalue3)){prt.msg(nR,i,W,FishTemp_i,p,outpt,1,5);warning("fv3: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
+              }else if(flagvalue3 < 0){prt.msg(nR,i,W,FishTemp_i,p,outpt,2,6);warning("fv3: Number inside sqrt is negative. Fish lost too much weight.")}
               finalwt <- (-alpha2 +sqrt(alpha2*alpha2 +4*beta2*(W*(alpha2+beta2*W) +egain -SpawnE)))/(2*beta2)
             }else if(beta2 == 0){  # can't use quadratic formula; ED = alpha1
               finalwt = (egain -SpawnE +W*alpha2)/alpha2
@@ -551,8 +560,8 @@ shinyServer(function(input, output,session) {
               elossCo = W*(alpha2+beta2*W) - Wco*(alpha1+beta1*Wco)  # energy loss needed to reach cutoff from W
               if(beta1 != 0){  # accounting for energy to reach cutoff and beyond, calc new weight
                 flagvalue4 <- (alpha1*alpha1 +4*beta1*(egain-SpawnE +elossCo +Wco*(alpha1+beta1*Wco)))
-                if(is.na(flagvalue4)){prt.msg(nR,i,W,Temperature[i],p,outpt,1,7);warning("fv4: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
-                }else if(flagvalue4 < 0){prt.msg(nR,i,W,Temperature[i],p,outpt,2,8);warning("fv4: Number inside sqrt is negative. Fish lost too much weight.")}
+                if(is.na(flagvalue4)){prt.msg(nR,i,W,FishTemp_i,p,outpt,1,7);warning("fv4: Number inside sqrt is NaN: not a number. Fish lost too much weight.")
+                }else if(flagvalue4 < 0){prt.msg(nR,i,W,FishTemp_i,p,outpt,2,8);warning("fv4: Number inside sqrt is negative. Fish lost too much weight.")}
                 partwt1 = sqrt(alpha1*alpha1 +4*beta1*(egain-SpawnE +elossCo +Wco*(alpha1+beta1*Wco)))
                 finalwt = (-alpha1 +partwt1)/(2*beta1)
                 testfinalwt = finalwt
@@ -568,7 +577,7 @@ shinyServer(function(input, output,session) {
         }
         
         # finalwt is Predator weight (g) at end of current day
-        if(finalwt < 0){prt.msg(nR,i,finalwt,Temperature[i],p,outpt,3,10)}  # print msg if weight becomes negative.
+        if(finalwt < 0){prt.msg(nR,i,finalwt,FishTemp_i,p,outpt,3,10)}  # print msg if weight becomes negative.
         if(finalwt < 0){W <- finalwt; break}  # break out of daily "for" loop; (Skip p-values that let W go negative.)
         
         weightgain  <-  finalwt-W  	#change in g/day
@@ -580,7 +589,7 @@ shinyServer(function(input, output,session) {
         
         if(calc.nut==TRUE){
           Phos <- phosphorous_allocation(C=Cons_cont,p_conc_prey=globalout_Phos_Conc_Prey[i,],AEp=globalout_Phos_Ae[i,],weightgain=weightgain,p_conc_pred=globalout_Phos_Conc_Pred[i,])
-          Nit <- nitrogen_allocation(C=Cons_cont,n_conc_prey=globalout_Nit_Conc_Prey[i,],AEn=globalout_Nit_Ae[i,],weightgain=weightgain,n_conc_pred=globalout_Nit_Conc_Pred[i,])
+          Nit  <-    nitrogen_allocation(C=Cons_cont,n_conc_prey=globalout_Nit_Conc_Prey[i,], AEn=globalout_Nit_Ae[i,], weightgain=weightgain,n_conc_pred=globalout_Nit_Conc_Pred[i,])
         } else{
           Phos <- NA
           Nit <- NA
@@ -588,7 +597,7 @@ shinyServer(function(input, output,session) {
         
         if(calc.contaminant==TRUE){
           #Cont <- pred_cont_conc_old(C=Cons_cont,W=finalwt,Temperature=Temperature,X_Prey=globalout_Prey_Conc[i,],X_Pred=X_Pred,TEx=globalout_Trans_eff[i,],X_ae=globalout_Prey_ass[i,],CONTEQ=CONTEQ)  
-          Cont <- pred_cont_conc(R.O2=R.O2,C=Cons_cont,W=W,Temperature=Temperature[i],
+          Cont <- pred_cont_conc(R.O2=R.O2,C=Cons_cont,W=W,Temperature=FishTemp_i,
                                  X_Prey=globalout_Prey_Conc[i,],X_Pred=X_Pred,
                                  TEx=globalout_Trans_eff[i,],X_ae=globalout_Prey_ass[i,],
                                  Ew=Ew, Kbw=Kbw, CONTEQ=CONTEQ)  
@@ -603,7 +612,7 @@ shinyServer(function(input, output,session) {
         if(outpt != "End") {  # Daily values not needed if only fitting final weight or cons
           ConsWInd <- ConsW*Ind  # save a repeated multiplication
           globalout[i,"Day"] <- Day_Temp[i]              ## row 1 in globalout data.frame
-          globalout[i,"Temperature.C"]<-Temperature[i]   ## row 2
+          globalout[i,"Temperature.C"]<-FishTemp_i       ## row 2 (allow behav.thermoregulation)
           globalout[i,"Starting.Weight"]<-W              ## row 3
           globalout[i,"Weight.g"]<-finalwt  # spawning loss already accounted for; ## row 4
           globalout[i,"Population.Number"]<-Ind2         ## row 5
@@ -759,9 +768,9 @@ shinyServer(function(input, output,session) {
     Nit_Ae_File         = design[nR,"Nit_Ae_File"] # Predator's N assimilation efficiency, by prey type, over time
     Nit_Conc_Pred_File  = design[nR,"Nit_Co_Pred_File"] # N in predator (g N/g), over time
     Nit_Conc_Prey_File  = design[nR,"Nit_Co_Prey_File"] # N in prey (g N/g), by prey type, over time
-    ###   Output files
+        ###   Output files
     FB4_Log_File        = design[nR,"FB4_Log_File"] # File to save values used in this run, and summary output.
-    #     Daily_Output_File only written if Save_Daily_Output == TRUE
+    #     Daily_Output_File only written if Save_Daily_Output == TRUE # new option in v1.1.5
     if("Save_Daily_Output" %in% colnames(design)) {   # may not be in old design files
       Save_Daily_Output = design[nR,"Save_Daily_Output"]   # Save daily output to a file? (TRUE/FALSE) 
     } else {
@@ -772,7 +781,19 @@ shinyServer(function(input, output,session) {
     } else {
       Daily_Output_File = "FB4_Default_Daily_Output_File.csv" # default File to save daily values
     }
-  } else {   ### Use values entered by User
+    # Behavioral thermoregulation  # new option in v1.1.6
+    #   If surface water T exceeds Thermoregulation_Temp, fish moves (down) to water at Thermoregulation_Temp.
+    if("Use_Thermoregulation" %in% colnames(design)) {   # may not be in old design files
+      Use_Thermoregulation = design[nR,"Use_Thermoregulation"]  # Have fish use behavioral thermoregulation? (TRUE/FALSE) 
+    } else {
+      Use_Thermoregulation = FALSE  
+    }
+    if("Thermoregulation_Temp" %in% colnames(design)) {   # may not be in old design files
+      Thermoregulation_Temp   = design[nR,"Thermoregulation_Temp"]   # file for daily output values from this run
+    } else {
+      Thermoregulation_Temp = 100 # default thermoregulation temperature so high there's no effect.
+    }
+    } else {   ### Use values entered by User
   
     Run_Name <- "User run"   ### Short name for this run
     Sp <- input$spec  # Select the species of interest by changing the number to the corresponding row number
@@ -799,6 +820,8 @@ shinyServer(function(input, output,session) {
     CONTEQ   <- input$cont_acc        # Contaminant Equation (1, or 2); Equation 3 coming soon.
     Save_Daily_Output <- FALSE        ### Save Daily output to a file? (TRUE/FALSE)
     Daily_Output_File = "FB4_Default_Daily_Output_File.csv" # default file name
+    Use_Thermoregulation <- FALSE     ### Use behavioral thermoregulation? (TRUE/FALSE)
+    Thermoregulation_Temp <- 100      ### Default temperature for thermoregulation; so high there's no effect
   }  ## end of specifying input values
   
   Fin         <- Last_day-First_day+1 ### Number of days in simulation output
@@ -1323,23 +1346,30 @@ if(calc.nut==TRUE){  # only need to read these files if "(calc.nut == TRUE)"
     print(paste("Cannot find Phos_Conc_Pred_File: ",Phos_Conc_Pred_File))
     exit()
   }
+  if(file.exists(Phos_Conc_Prey_File)){
+    Phos_Conc_Prey <- read.csv(Phos_Conc_Prey_File,head=TRUE, stringsAsFactors = FALSE)
+  } else {
+    print(paste("Cannot find Phos_Conc_Prey_File: ",Phos_Conc_Prey_File))
+    exit()
+  }
   Day_Phos_Conc_Pred <- Phos_Conc_Pred[,1] # Days
+  Day_Phos_Conc_Prey <- Phos_Conc_Prey[,1] # Days
   FB4.Param2 = append(FB4.Param2, c("Phos_Ae_File","Phos_Conc_Pred_File","Phos_Conc_Prey_File"))
   FB4.Value2 = append(FB4.Value2, c(as.character(Phos_Ae_File),
                                       as.character(Phos_Conc_Pred_File),
                                       as.character(Phos_Conc_Prey_File)))  # record file used
   
-  
-  prey_items_nut <- (ncol(Phos_Ae))-1
-  Day_Nit_Ae <- Nit_Ae[,1] # Days
-  Nit_Conc_Pred <- read.csv(Nit_Conc_Pred_File,head=TRUE, stringsAsFactors = FALSE)
-  Day_Nit_Conc_Pred <- Nit_Conc_Pred[,1] # Days
-  Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE, stringsAsFactors = FALSE)
-  Day_Nit_Conc_Prey <- Nit_Conc_Prey[,1] # Days
-  FB4.Param2 = append(FB4.Param2, c("Nit_Ae_File","Nit_Conc_Pred_File","Nit_Conc_Prey_File"))
-  FB4.Value2 = append(FB4.Value2, c(as.character(Nit_Ae_File),
-                                      as.character(Nit_Conc_Pred_File),
-                                      as.character(Nit_Conc_Prey_File)))  # record file used
+  # commented out by JEB on 9/18/2024
+  #prey_items_nut <- (ncol(Phos_Ae))-1
+  #Day_Nit_Ae <- Nit_Ae[,1] # Days
+  #Nit_Conc_Pred <- read.csv(Nit_Conc_Pred_File,head=TRUE, stringsAsFactors = FALSE)
+  #Day_Nit_Conc_Pred <- Nit_Conc_Pred[,1] # Days
+  #Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE, stringsAsFactors = FALSE)
+  #Day_Nit_Conc_Prey <- Nit_Conc_Prey[,1] # Days
+  #FB4.Param2 = append(FB4.Param2, c("Nit_Ae_File","Nit_Conc_Pred_File","Nit_Conc_Prey_File"))
+  #FB4.Value2 = append(FB4.Value2, c(as.character(Nit_Ae_File),
+  #                                    as.character(Nit_Conc_Pred_File),
+  #                                    as.character(Nit_Conc_Prey_File)))  # record file used
   
   last_day_Phos_Ae <- tail(Day_Phos_Ae, n = 1)  # get the total number of days
   last_day_Phos_Conc_Pred <- tail(Day_Phos_Conc_Pred, n = 1)  # get the total number of days
@@ -1360,13 +1390,20 @@ if(calc.nut==TRUE){  # only need to read these files if "(calc.nut == TRUE)"
     print(paste("Cannot find Nit_Ae_File: ",Nit_Ae_File))
     exit()
   }
-  Day_Nit_Ae <- Nit_Ae[,1] # Days
   if(file.exists(Nit_Conc_Pred_File)){
     Nit_Conc_Pred <- read.csv(Nit_Conc_Pred_File,head=TRUE, stringsAsFactors = FALSE)
   } else {
     print(paste("Cannot find Nit_Conc_Pred_File: ",Nit_Conc_Pred_File))
     exit()
   }
+  if(file.exists(Nit_Conc_Prey_File)){
+    Nit_Conc_Prey <- read.csv(Nit_Conc_Prey_File,head=TRUE, stringsAsFactors = FALSE)
+  } else {
+    print(paste("Cannot find Nit_Conc_Prey_File: ",Nit_Conc_Prey_File))
+    exit()
+  }
+  Day_Nit_Ae <- Nit_Ae[,1] # Days
+  Day_Nit_Conc_Pred <- Nit_Conc_Pred[,1] # Days
   Day_Nit_Conc_Prey <- Nit_Conc_Prey[,1] # Days
   FB4.Param2 = append(FB4.Param2, c("Nit_Ae_File","Nit_Conc_Pred_File","Nit_Conc_Prey_File"))
   FB4.Value2 = append(FB4.Value2, c(as.character(Nit_Ae_File),
@@ -1458,6 +1495,26 @@ if(Save_Daily_Output) {
 }    
 
 ########################################################################
+### Behavioral Thermoregulation:  record values used for this run
+########################################################################
+
+# Behavioral Thermoregulation  # new option in v1.1.6
+#   If surface water T exceeds Thermoregulation_Temp, fish moves (down) to water at Thermoregulation_Temp.
+if("Use_Thermoregulation" %in% colnames(design)) {   # may not be in old design files
+  FB4.Param2 = append(FB4.Param2, "Use_Thermoregulation")
+  FB4.Value2 = append(FB4.Value2, as.logical(Use_Thermoregulation))
+  if("Thermoregulation_Temp" %in% colnames(design)) {   # may not be in old design files
+    if(Use_Thermoregulation) {
+      FB4.Param2 = append(FB4.Param2, "Thermoregulation_Temp")
+      FB4.Value2 = append(FB4.Value2, as.character(Thermoregulation_Temp))  # record T used
+    } else {
+      FB4.Param2 = append(FB4.Param2, "Thermoregulation_Temp")
+      FB4.Value2 = append(FB4.Value2,  "NA")  #  value not used
+    }    
+  }
+} 
+
+########################################################################
 ### binary search for p-value, needed values 
 ########################################################################
 
@@ -1498,7 +1555,7 @@ if(fit.to=="Ration"){
     W1.p <- grow(Temperature=Temperature,W=Init_W,p=p,outpt=outpt,globalout_Prey=globalout_Prey, globalout_Prey_E=globalout_Prey_E)
     W1.p
     rownames(W1.p) <- NULL
-    Pmsg1 = NA
+    Pmsg1 = NA; msg.loc = 0
     p.OK = TRUE
   } else {   ### did *not* find adequate value for p
     # p-value out of tolerance
@@ -1510,7 +1567,7 @@ if(fit.to=="Ration"){
     }else if(p >= 4.9999998){  # Because of binary search method, highest p-value is not quite 5
       Pmsg1 <- "Error! p-value at upper limit. No fit."
       p.OK = FALSE
-      msg.loc = 20
+      msg.loc = 21
     }
     FB4.Err.Param <- c("Run","p-value","Message","Msg.location")
     FB4.Err.Value <- c(nR, p, Pmsg1, msg.loc)
@@ -1699,7 +1756,13 @@ if(Save_Daily_Output){     # if saving daily output...
 #----------------------------------------------------------------------------------------
 # End of Model Run, Summary preparation, and writing Log file  
 #
+print(paste("End of run ",nR))  # print to the RStudio Console
+
 } ## end of "nR" Run-loop for Design File
+#
+if(UseDesignFile){ 
+    print(paste("End of runs of Design File: ", Design_File))  # print to the RStudio Console
+} ## end of if()  
 #
 }) ## end of "withProgress" loop for Design File
 #
