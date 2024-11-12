@@ -1,6 +1,6 @@
 ﻿## Welcome to Fish Bioenergetics 4.0
 
-You have downloaded FB4, version v1.1.6. (September 21, 2024)
+You have downloaded FB4, version v1.1.7. (November 11, 2024)
  
 The FB4 software, User Manual, and sample input files are all in the same zipped file. Instructions for getting started are in the User Manual (included in the zip file) and are also summarized below.
 
@@ -119,7 +119,9 @@ See the note below for v1.1.0 for another brief explanation of how to use Design
 
 ### FB4 versions:
 
-- __Latest version: FB4 v1.1.6__ was released 9/21/2024. Click the "Download .zip" button at the top of the web page to obtain the latest version. This version adds a new option for Design Files to specify behavioral thermoregulation. Using this option, a simulated fish experiences (seeks out) a specified preferred temperature whenever the water temperature exceeds that value. For example, an adult Bluegill may remain in 27 C water when the epilimnion of a thermally stratified lake exceeds 27 C. To use this option, add two columns to the Design File: Use_Thermoregulation and Thermoregulation_Temp. In the Use_Thermoregulation column, enter TRUE for each simulation (row) that will use this option, and FALSE otherwise. In the Thermoregulation_Temp column, enter the temperature to which the fish will behaviorally thermoregulate (e.g., 27) if surface water exceeds this value, or enter NA if there is no thermoregulation for that run. An example Design File is included. Some additional minor changes were made to the code.
+- __Latest version: FB4 v1.1.7__ was released 11/11/2024. Click the "Download .zip" button at the top of the web page to obtain the latest version. This version fixes an issue running FB4 without a Design File.
+
+- __FB4 v1.1.6__ was released 9/21/2024. This version adds a new option for Design Files to specify behavioral thermoregulation. Using this option, a simulated fish experiences (seeks out) a specified preferred temperature whenever the water temperature exceeds that value. For example, an adult Bluegill may remain in 27 C water when the epilimnion of a thermally stratified lake exceeds 27 C. To use this option, add two columns to the Design File: Use_Thermoregulation and Thermoregulation_Temp. In the Use_Thermoregulation column, enter TRUE for each simulation (row) that will use this option, and FALSE otherwise. In the Thermoregulation_Temp column, enter the temperature to which the fish will behaviorally thermoregulate (e.g., 27) if surface water exceeds this value, or enter NA if there is no thermoregulation for that run. An example Design File is included. Some additional minor changes were made to the code.
 
 - __FB4 v1.1.5__ was released 1/26/2023. This version corrected the default value of UseDesignFile to FALSE so that manual runs are expected initially.
 
