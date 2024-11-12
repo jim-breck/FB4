@@ -2,7 +2,9 @@
 
 You can download the latest version of FB4 by clicking a button on this web page. The FB4 software, User Manual, and sample input files are all in the same zipped file. Instructions for getting started are in the User Manual (included in the zip file) and are also summarized below.
 
-We are today (9/21/2024) releasing Version 1.1.6 of the FB4 software. Details for this update are explained at the bottom of this page. 
+We are today (11/11/2024) releasing Version 1.1.7 of the FB4 software. Details for this update are explained at the bottom of this page. 
+
+FB4 v1.1.6 was released on 9/21/2024.
 
 FB4 v1.1.5 was released on 1/26/2023.
 
@@ -146,7 +148,9 @@ See the note below for v1.1.0 for another brief explanation of how to use Design
 
 ### FB4 versions:
 
-- __Latest version: FB4 v1.1.6__ was released 9/21/2024. Click the "Download .zip" button at the top of the web page to obtain the latest version. This version adds a new option for Design Files to specify behavioral thermoregulation. Using this option, a simulated fish experiences (seeks out) a specified preferred temperature whenever the water temperature exceeds that value. For example, an adult Bluegill may remain in 27 C water when the epilimnion of a thermally stratified lake exceeds 27 C. To use this option, add two columns to the Design File: Use_Thermoregulation and Thermoregulation_Temp. In the Use_Thermoregulation column, enter TRUE for each simulation (row) that will use this option, and FALSE otherwise. In the Thermoregulation_Temp column, enter the temperature to which the fish will behaviorally thermoregulate (e.g., 27) if surface water exceeds this value, or enter NA if there is no thermoregulation for that run. An example Design File is included. Some additional minor changes were made to the code.
+- __Latest version: FB4 v1.1.7__ was released 11/11/2024. Click the "Download .zip" button at the top of the web page to obtain the latest version. This version fixes an issue running FB4 without a Design File.
+
+- __FB4 v1.1.6__ was released 9/21/2024. This version adds a new option for Design Files to specify behavioral thermoregulation. Using this option, a simulated fish experiences (seeks out) a specified preferred temperature whenever the water temperature exceeds that value. For example, an adult Bluegill may remain in 27 C water when the epilimnion of a thermally stratified lake exceeds 27 C. To use this option, add two columns to the Design File: Use_Thermoregulation and Thermoregulation_Temp. In the Use_Thermoregulation column, enter TRUE for each simulation (row) that will use this option, and FALSE otherwise. In the Thermoregulation_Temp column, enter the temperature to which the fish will behaviorally thermoregulate (e.g., 27) if surface water exceeds this value, or enter NA if there is no thermoregulation for that run. An example Design File is included. Some additional minor changes were made to the code.
 
 - __FB4 v1.1.5__ was released 1/26/2023. This version corrected the default value of UseDesignFile to FALSE so that manual runs are expected initially.
 

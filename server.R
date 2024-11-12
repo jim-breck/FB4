@@ -1,7 +1,7 @@
 require(shiny)
 
-# Fish Bioenergetics Model 4, version v1.1.6
-FB4.version = "v1.1.6"  # This version (v1.1.6) adds the option for behavioral thermoregulation.
+# Fish Bioenergetics Model 4, version v1.1.7
+FB4.version = "v1.1.7"  # This version (v1.1.7) fixes an issue running FB4 without a DesignFile.
 # Version (v1.1.6) adds the option for behavioral thermoregulation; if Design File has
 #  "Use_Thermoregulation" = TRUE, then fish avoids high T and moves to Thermoregulation_Temp.
 # Version (v1.1.5) adds the option to save daily output, by run, when using a Design File;
@@ -615,8 +615,8 @@ shinyServer(function(input, output,session) {
           globalout[i,"Temperature.C"]<-FishTemp_i       ## row 2 (allow behav.thermoregulation)
           globalout[i,"Starting.Weight"]<-W              ## row 3
           globalout[i,"Weight.g"]<-finalwt  # spawning loss already accounted for; ## row 4
-          globalout[i,"Population.Number"]<-Ind2         ## row 5
-          globalout[i,"Population.Biomass.g"]<-finalwt*Ind    ## row 6
+          globalout[i,"Population.Number"]<-Ind2              ## row 5 (Ind2 is N at end of day)
+          globalout[i,"Population.Biomass.g"]<-finalwt*Ind    ## row 6 (Ind  is N at start of day)
           globalout[i,"Specific.Growth.Rate.J.g.d"]<-G        ## row 7
           globalout[i,"Specific.Consumption.Rate.J.g.d"]<-Cons  # (J/g) ## row 8
           globalout[i,"Specific.Egestion.Rate.J.g.d"]<-Eg     ## row 9
@@ -646,8 +646,8 @@ shinyServer(function(input, output,session) {
           globalout[i,"Cons.Pop.J"]<-ConsWInd               ## row 33
           globalout[i,"Cum.Cons.Pop.g"]<-cumsum(ConsWInd/mean_prey_ED) ## row 34
           globalout[i,"Cum.Cons.Pop.J"]<-cumsum(ConsWInd)   ## row 35
-          globalout[i,"Mortality.number"]<-Ind-Ind2         ## row 36
-          globalout[i,"Mortality.g"]<-(Ind-Ind2)*W          ## row 37
+          globalout[i,"Mortality.number"]<-Ind-Ind2         ## row 36 (Ind  is N at start of day)
+          globalout[i,"Mortality.g"]<-(Ind-Ind2)*W          ## row 37 (Ind2 is N at end of day)
           globalout[i,"Nitrogen.Egestion.g"]<-Nit[4]        ## row 38
           globalout[i,"Phosphorous.Egestion.g"]<-Phos[4]    ## row 39
           globalout[i,"N.to.P.Egestion"]<-Nit[4]/Phos[4]    ## row 40
@@ -738,7 +738,7 @@ shinyServer(function(input, output,session) {
     Oxycal   <- design[nR,"Oxycal"]     ### Oxycalorific coefficient
     calc.pop_mort <- design[nR,"calc.pop_mort"]  ### Do mortality calcs? (TRUE/FALSE)
     # calc.pop_mort is used to avoid reading Mortality_File if not used
-    calc.spawn <- design[nR,"calc.spawn"]   ### Do fish spawn?
+    calc.spawn <- design[nR,"calc.spawn"]   ### Do fish spawn? (TRUE/FALSE)
     # calc.spawn is used to avoid reading Reproduction_File if not used
     calc.nut <- design[nR,"calc.nut"]   ### Do nutrient calcs? (TRUE/FALSE)
     # calc.nut is used to avoid reading the six nutrient files if not used
@@ -1089,6 +1089,8 @@ shinyServer(function(input, output,session) {
     FB4.Value2 = append(FB4.Value2,  as.character(Mortality_File))  # record file used
     Day_mort <- Mortality[,1] # Days
     mort_types <- (ncol(Mortality))-1
+    #FB4.Param2 = append(FB4.Param2, "N_Mort_types")
+    #FB4.Value2 = append(FB4.Value2,  mort_types)  # N of mortality types
     last_day_mort <- tail(Day_mort, n = 1)  # get the total number of days
     globalout_mort <- NULL
     
@@ -1102,7 +1104,7 @@ shinyServer(function(input, output,session) {
     
     colnames(globalout_mort) <- names(Mortality)[-1]
     globalout_mort <- data.frame(globalout_mort)
-    globalout_mort$Nat_Mort_Int <- NA
+    globalout_mort$Nat_Mort_Int  <- NA
     globalout_mort$Fish_Mort_Int <- NA
     
     days <- nrow(globalout_mort)
@@ -1117,14 +1119,14 @@ shinyServer(function(input, output,session) {
       globalout_mort$Nat_Mort_Int[nat_int_start:i] <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],rep(nat_int_dur,nat_int_dur),NA)
       globalout_mort$Nat_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-nat_int_start,NA)
       globalout_mort$Nat_Mort_Int[nat_int_start:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-nat_int_start+1,globalout_mort$Nat_Mort_Int[nat_int_start:i])
-      nat_int_dur <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],0,nat_int_dur)
+      nat_int_dur   <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],0,nat_int_dur)
       nat_int_start <- ifelse(globalout_mort$natural[i+1]!=globalout_mort$natural[i],i+1,nat_int_start)
       
       fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],fish_int_dur+1,fish_int_dur+1)
       globalout_mort$Fish_Mort_Int[fish_int_start:i] <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],rep(fish_int_dur,fish_int_dur),NA)
       globalout_mort$Fish_Mort_Int[nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-fish_int_start,NA)
       globalout_mort$Fish_Mort_Int[fish_int_start:nrow(globalout_mort)] <- ifelse(i+1==nrow(globalout_mort),i+1-fish_int_start+1,globalout_mort$Fish_Mort_Int[fish_int_start:i])
-      fish_int_dur <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],0,fish_int_dur)
+      fish_int_dur   <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],0,fish_int_dur)
       fish_int_start <- ifelse(globalout_mort$fishing[i+1]!=globalout_mort$fishing[i],i+1,fish_int_start)
     }
     
@@ -1500,17 +1502,19 @@ if(Save_Daily_Output) {
 
 # Behavioral Thermoregulation  # new option in v1.1.6
 #   If surface water T exceeds Thermoregulation_Temp, fish moves (down) to water at Thermoregulation_Temp.
-if("Use_Thermoregulation" %in% colnames(design)) {   # may not be in old design files
-  FB4.Param2 = append(FB4.Param2, "Use_Thermoregulation")
-  FB4.Value2 = append(FB4.Value2, as.logical(Use_Thermoregulation))
-  if("Thermoregulation_Temp" %in% colnames(design)) {   # may not be in old design files
-    if(Use_Thermoregulation) {
-      FB4.Param2 = append(FB4.Param2, "Thermoregulation_Temp")
-      FB4.Value2 = append(FB4.Value2, as.character(Thermoregulation_Temp))  # record T used
-    } else {
-      FB4.Param2 = append(FB4.Param2, "Thermoregulation_Temp")
-      FB4.Value2 = append(FB4.Value2,  "NA")  #  value not used
-    }    
+if(UseDesignFile){       ### If using values from a Design file...
+  if("Use_Thermoregulation" %in% colnames(design)) {   # may not be in old design files
+    FB4.Param2 = append(FB4.Param2, "Use_Thermoregulation")
+    FB4.Value2 = append(FB4.Value2, as.logical(Use_Thermoregulation))
+    if("Thermoregulation_Temp" %in% colnames(design)) {   # may not be in old design files
+      if(Use_Thermoregulation) {
+        FB4.Param2 = append(FB4.Param2, "Thermoregulation_Temp")
+        FB4.Value2 = append(FB4.Value2, as.character(Thermoregulation_Temp))  # record T used
+      } else {
+        FB4.Param2 = append(FB4.Param2, "Thermoregulation_Temp")
+        FB4.Value2 = append(FB4.Value2,  "NA")  #  value not used
+      }    
+    }
   }
 } 
 
