@@ -72,312 +72,32 @@ shinyServer(function(input, output,session) {
     Design.time.Start <- proc.time() # start clock to time all Design_File runs
     
     ########################################################################
-    ### Define functions (before Run-loop)  
-    
-    exit <- function() { invokeRestart("abort") }
-    
-    ########################################################################
-    ### Consumption models
-    ########################################################################
-    
-    Cf1T <- function(Temperature) { ### Temperature function equation 1 (Hanson et al. 1997; equation from Stewart et al. 1983)
-      ft <- exp(CQ*Temperature)
-      return(ft)
-    }
-    
-    Cf2T <- function(Temperature) { ### Temperature function equation 2 (Hanson et al. 1997; equation from Kitchell et al. 1977)
-      if (Temperature < CTM) { 
-        V <- (CTM - Temperature) / (CTM - CTO)
-        ft <- V^CX * exp(CX * (1 - V))
-      } else if (Temperature >=CTM) {ft  <-  0}  
-      
-      if(ft < 0) {ft  <-  0}  ## prevent negative values
-      return(ft)
-    }
-    
-    Cf3T <- function(Temperature) { ### Temperature function equation 3 (Hanson et al. 1997; equation from Thornton and Lessem 1978)
-      L1 <- exp(CG1*(Temperature-CQ))
-      KA <- (CK1*L1) / (1 + CK1*(L1-1))
-      L2 <- exp(CG2*(CTL-Temperature))
-      KB <- (CK4*L2) / (1 + CK4*(L2-1))
-      ft <- KA * KB
-      return(ft)
-    }
-    
-    Cf4T <- function(Temperature) { ### Temperature function equation 4; equation from Bevelhimer et al. 1985 )
-      ft <- exp(CQ*Temperature + CK1*Temperature^2 + CK4*Temperature^3)
-      if(ft < 0) {ft  <-  0}  ## prevent negative values; added by JEB
-      return(ft)
-    }
-    
-    consumption <- function(Temperature, W, p, CEQ) { ### Consumption function
-      Cmax <- CA * W ^ CB 
-      if(CEQ == 1) {ft = Cf1T(Temperature)   # reformatted to minimize if-tests; JEB
-      } else if(CEQ == 2) {ft = Cf2T(Temperature)
-      } else if(CEQ == 3) {ft = Cf3T(Temperature)
-      } else if(CEQ == 4) {ft = Cf4T(Temperature)}
-      
-      return(Cmax * p * ft)
-    }
-    
-    ########################################################################
-    ### Respiration models 
-    ########################################################################
-    
-    Rf1T <- function(Temperature) { ### Temperature function equation 1 (Hanson et al. 1997; Stewart et al. 1983)
-      ft <- exp(RQ*Temperature)
-      return(ft)
-    }
-    
-    RACTf1T <- function(W,Temperature) { ### Temperature function equation 1 with activity component (Hanson et al. 1997; Stewart et al. 1983)
-      if(Temperature <= RTL) {VEL <- ACT * W ^ RK4 * exp(BACT * Temperature)
-      } else if(Temperature >  RTL) {VEL <- RK1 * W ^ RK4 * exp(RK5 * Temperature)}  
-      ACTIVITY <- exp(RTO * VEL)
-      return(ACTIVITY)
-    }
-    
-    Rf2T <- function(Temperature) { ### Temperature function equation 2 (Hanson et al. 1997; Kitchell et al. 1977)
-      if (Temperature< RTM) {
-        V <- (RTM - Temperature) / (RTM - RTO)
-        ft <- V^RX * exp(RX * (1 - V))
-      } else if (Temperature>=RTM) {ft <- 0.000001}
-      
-      if(ft < 0) {ft <- 0.000001}  
-      return(ft)
-    }
-    
-    respiration <- function(Temperature, W, REQ) { ### Respiration function
-      Rmax <- RA * W ^ RB  
-      if(REQ == 1) {
-        ft <- Rf1T(Temperature)  
-        ACTIVITY <- RACTf1T(W,Temperature) 
-      } else if(REQ == 2) {
-        ft <- Rf2T(Temperature)
-        ACTIVITY <- ACT
-      }
-      R <- (Rmax * ft * ACTIVITY) 
-      return(R)
-    }
-    
-    ########################################################################
-    ### Specific dynamic action 
-    ########################################################################
-    
-    SpDynAct <- function(C,Eg) { ### Specific dynamic action function (Hanson et al. 1997)
-      S <- SDA *(C-Eg)
-      return(S)
-    }
-    
-    ########################################################################
-    ### Egestion and Excretion models 
-    ########################################################################
-    
-    egestion1 <- function(C) {
-      # egestion
-      Eg = FA * C
-      return(Eg)
-    }
-    
-    egestion2 <- function(C,Temperature,p) { ### Egestion model from Elliott (1976)
-      Eg = FA*(Temperature^FB)*exp(FG*p)*C
-      return(Eg)
-    }
-    
-    egestion3 <- function(C,Temperature,p) { ### Egestion model from Stewart et al. (1983)
-      PE = FA*(Temperature^FB)*exp(FG*p)
-      PFF = sum(globalout_Ind_Prey[i,]*globalout_Prey[i,]) # allows specification of indigestible prey, as proportions
-      PF = ((PE-0.1)/0.9)*(1-PFF)+PFF  
-      Eg = PF*C
-      return(Eg)
-    }
-    
-    egestion4 <- function(C,Temperature) { ### Egestion model from Elliott (1976)
-      Eg = FA*(Temperature^FB)*C
-      return(Eg)
-    }
-    
-    egestion <- function(C, Temperature, p, EGEQ) {
-      if(EGEQ == 1) {Eg <- egestion1(C)
-      } else if(EGEQ == 2) {Eg <- egestion2(C,Temperature,p)
-      } else if(EGEQ == 3) {Eg <- egestion3(C,Temperature,p)
-      } else if(EGEQ == 4) {Eg <- egestion4(C,Temperature)
-      }  # reformatted to minimize if-tests; JEB
-      return(Eg)
-    }
-    
-    excretion1 <- function(C, Eg) {
-      U = UA * (C - Eg)
-      return(U)
-    }
-    
-    excretion2 <- function(C,Temperature,p,Eg) {
-      U = UA*(Temperature^UB)*exp(UG*p)*(C-Eg)
-      return(U)
-    }
-    
-    excretion3 <- function(C,Temperature,p,Eg) {
-      U = UA*(Temperature^UB)*exp(UG*p)*(C-Eg)
-      return(U)
-    }
-    
-    excretion4 <- function(C,Temperature,Eg) {
-      U = UA*(Temperature^UB)*(C-Eg)
-      return(U)
-    }
-    
-    excretion <- function(C, Eg, Temperature, p, EXEQ) {
-      if(EXEQ == 1) {U <- excretion1(C,Eg)
-      } else if(EXEQ == 2) {U <- excretion2(C,Temperature,p,Eg)
-      } else if(EXEQ == 3) {U <- excretion3(C,Temperature,p,Eg)
-      } else if(EXEQ == 4) {U <- excretion4(C,Temperature,Eg)
-      }  # reformatted to minimize if-checks; JEB
-      return(U)
-    }
-    
-    ########################################################################
-    ### Predator Energy Density function 
-    ########################################################################
-    
-    # Define function for obtaining predator energy density
-    pred_En_D <- function(W,day,PREDEDEQ) {    # Find Energy Density (ED, J/g) for this day and W
-      if(PREDEDEQ == 1) {return(Pred_E[day])   # Use daily interpolated values from csv file; ignore weight
-      } else if(PREDEDEQ == 3) {return(alpha1*W^beta1)  # ED is power function of weight; ignore day
-      } else if(PREDEDEQ == 2) {  # Using two line segments, ED is linear function of weight; ignore day
-        Wco = as.numeric(cutoff)  # Wco is weight at cutoff, where the line breaks
-        if(W <Wco) {return((as.numeric(alpha1) + as.numeric(beta1)*W))}
-        if(W>=Wco) {return((as.numeric(alpha2) + as.numeric(beta2)*W))} 
-        if(W <Wco && as.numeric(beta1) == 0) {return((as.numeric(alpha1)))}  
-        if(W>=Wco && as.numeric(beta2) == 0) {return((as.numeric(alpha2)))}
-      }  # restructured using "else if" to reduce if-tests; JEB
-    }  # end of predator energy density section
-
-    ########################################################################
-    ### Body Composition
-    ###   as Protein, Lipid, Ash and Water
-    ###   and energy density
-    ########################################################################  
-    # Fish proximate body composition, based on Breck (2014)
-    # Breck, J.E. 2014. Body composition in fishes: body size matters. Aquaculture 433:40-49.
-    #
-    # Estimate g Protein from g Water
-    Protein = function(H2O) {
-      # Regression from Breck (2014), N = 101, r2 = 0.9917
-      Pro = 10**(-0.8068 + 1.0750 * log10(H2O))
-      return(Pro)
-    }
-    # Estimate g Ash from g Water
-    Ash = function(H2O){
-      # Regression from Breck (2014), N = 101, r2 = 0.9932
-      A.g = 10**(-1.6765 + 1.0384 * log10(H2O))
-      return(A.g)
-    }
-    #
-    # Estimate g Fat from W and g water, g Protein, g Ash, by subtraction
-    Fat = function(W, H2O, Pro, Ash){
-      F.g = W - H2O - Pro - Ash
-      return(F.g)
-    }
-    # Estimate energy density from Fat and Protein content
-    EnDen = function(Fat, Pro, W){
-      ED = (Fat.g*36200 + Pro.g*23600)/W  # J/g wet weight
-      return(ED)
-    }
-    
-    ########################################################################
-    ### Contaminant accumulation functions
-    ########################################################################
-    
-    pred_cont_conc_old <- function(C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,CONTEQ) {
-      # used in testing version of FB4; only two CONTEQ's.
-      Burden <- X_Pred*W
-      Kx <- ifelse(CONTEQ==2, exp(0.066*Temperature-0.2*log(W)-6.56)/1.5, 0)
-      Uptake <- ifelse(CONTEQ == 1,sum(C*X_Prey*TEx),sum(C*X_Prey*X_ae))
-      Clearance <- ifelse(CONTEQ==2,Kx*Burden,0)
-      Accumulation <- Uptake-Clearance
-      Burden <- ifelse(CONTEQ == 1,Burden+Uptake,Burden+Accumulation)
-      X_Pred <- Burden/W  # Caution! Should calculate new Conc using "finalwt", not W; JEB
-      return(c(Clearance, Uptake, Burden, X_Pred))     
-    }
-    
-    # Includes CONTEQ 3 for Arnot & Gobas (2004)
-    pred_cont_conc <- function(R.O2,C,W,Temperature,X_Prey,X_Pred,TEx,X_ae,Ew,Kbw,CONTEQ) {
-      Burden <- X_Pred*W  # Burden in micrograms; This uses W and X_Pred at **start** of day
-      if(CONTEQ==1) {
-        Uptake <- sum(C*X_Prey*TEx)   # uptake from food only; no elimination
-        Kx <- 0  # no elimination
-      } else if(CONTEQ==2) {
-        Uptake <- sum(C*X_Prey*X_ae)  # uptake from food only (no uptake from water)
-        Kx <- exp(0.066*Temperature-0.2*log(W)-6.56)  # MeHg elimination rate coeff; Trudel & Rasmussen (1997)
-      } else if(CONTEQ==3) {
-        VOx = 1000*R.O2  # (mg O2/g/d) = (1000 mg/g)*(g O2/g/d), where R.O2 is (g O2/g/d)
-        COx = (-0.24*Temperature +14.04)*DO_Sat.fr  # dissolved oxygen concentration (mg O2/L); (eq.9)
-        K1 = Ew*VOx/COx  # water cleared of contaminant per g per day; (L/g/day), proportional to Resp
-        Uptake.water = W*K1*phi_DT*Cw_tot*1000  # contam from water (ug/d); (L/day)*(mg/L)*(1000 ug/mg)
-        Uptake.food  = sum(C*X_Prey*X_ae)  # contam in all food eaten (ug/d); (g/d)*(ug/g)
-        Uptake = Uptake.water + Uptake.food  # (ug/d)
-        Kx = K1/Kbw  # clearance rate is proportional to K1 and to 1/fish:water partition coefficient
-      }
-      Clearance <- Kx*Burden
-      Accumulation <- Uptake - Clearance  # Accumulation = net change in Burden
-      Burden = Burden + Accumulation  # update Burden
-      #X_Pred <- Burden/W  # update predator contaminant concentration using new Burden & FINALWEIGHT!
-      return(c(Clearance,Uptake,Burden,NA))  # Use NA to save a place for X_Pred    
-    }
-    
-    ########################################################################
-    ### Binary search algorithm for p-value
+    ### Load modular function definitions
     ########################################################################
 
-    fit.p <- function(p, IW, FW, W.tol, max.iter) {
-      W      <- IW    # Initial weight
-      n.iter <- 0     # Counter for number of iterations
-      p.max  <- 5.00  # current max
-      p.min  <- 0.00  # current min
-      outpt <- "End"  # desire only ending weight or consumption value, not full vector; revised by JEB
-      fit_p_Flag <- FALSE # at start, no fit has been found
-      withProgress(message = 'Calculating ...', min=0, max=max.iter, value = 0, {  # revised by JEB
-        # initialize W.p
-        W.p <- grow(Temperature, W, p, outpt,globalout_Prey, globalout_Prey_E)
-        while((n.iter <= max.iter) & (abs(W.p-FW) > W.tol)) {
-          n.iter <- n.iter + 1
-          incProgress(1, detail = paste("Doing iteration", n.iter))  # added by JEB
-          if(W.p > FW) {p.max <- p} else {p.min <- p}
-          p <- (p.min + p.max)/2 #p.min + (p.max - p.min)/2
-          W.p <- grow(Temperature, W, p, outpt,globalout_Prey, globalout_Prey_E)
-        }
-      })  # end of "withProgress" function; added by JEB
-      if(abs(W.p-FW) <= W.tol) {fit_p_Flag <- TRUE} # adequate fit has been reached
-      return(c(p, fit_p_Flag)) (g)  ## fit_p_Flag added by JEB
-    }  # end of fit.p function
+    # Load I/O utilities
+    source("R/io/file_readers.R")
+    source("R/io/data_interpolation.R")
+
+    # Load utility functions
+    source("R/simulation/utilities.R")
+    source("R/simulation/fitting.R")
+    source("R/simulation/growth_helpers.R")
+
+    # Load bioenergetics models
+    source("R/bioenergetics/consumption.R")
+    source("R/bioenergetics/respiration.R")
+    source("R/bioenergetics/sda.R")
+    source("R/bioenergetics/waste.R")
+    source("R/bioenergetics/energy_density.R")
+
+    # Load sub-models
+    source("R/sub_models/body_composition.R")
+    source("R/sub_models/contaminants.R")
+    source("R/sub_models/nutrients.R")
     
-    ########################################################################
-    ### Function to Print Message if problem detected 
-    ########################################################################
-    
-    prt.msg <- function(run, day, wt, waterT, p, outpt, msg.num, msg.loc) {
-      # prt.msg(nR,i,W,Temperature[i],0)  # example of using this function
-      if(msg.num == 1) {
-        print("Error in calculating weight at end of the day.")
-        print("Number inside sqrt is NaN: not a number. Fish lost too much weight.")
-      }else if(msg.num == 2) {
-        print("Error in calculating weight at end of the day.")
-        print("Number inside sqrt is negative. Fish lost too much weight.")
-      }else if(msg.num == 3) {
-        if(outpt == "End") {print("While fitting the p-value, ")}
-        print("Fish weight became negative at end of this day.")
-      }else if(msg.num == 4) {
-        if(outpt == "End") {print("While fitting the p-value, ")}
-        print("Could not determine an adequate p-value to fit the desired value.")
-      }
-      # Create a data frame for the Console version of the Error message
-      FB4.Err.Param <- c("Run","Day","W(g)","T(C)","p-value","Msg.number","Msg.location")
-      FB4.Err.Value <- c(run, day, wt, waterT, p, msg.num, msg.loc)
-      FB4.Err.Log <- as.data.frame(cbind(FB4.Err.Param, FB4.Err.Value), stringsAsFactors = FALSE)
-      row.names(FB4.Err.Log) <- seq(1:nrow(FB4.Err.Log))  # Use numbers for row names
-      print(FB4.Err.Log)  # print to the RStudio Console
-      return
-    }  # end of prt.msg function
-    
+    # Contaminant, fitting, and utility functions now loaded from R/ modules
+
     ########################################################################
     ### Growth Function using p-value
     ########################################################################
@@ -936,40 +656,25 @@ shinyServer(function(input, output,session) {
   beta2    <- parms[Sp,"Beta2"]  ### slope of the allometric mass function for second size range
   
   ########################################################################
-  ### Temperature 
+  ### Temperature
   ########################################################################
 
-  if(file.exists(Temperature_File)){
-    Temperature <- read.csv(Temperature_File,stringsAsFactors = FALSE) #  Read daily Temp values from .csv file
-  } else {
-    print(paste("Cannot find Temperature_File: ",Temperature_File))
-    exit()
-  }
+  Temperature <- read_csv_with_check(Temperature_File, "Temperature_File")
   Day <- Temperature[,1] # Days
   Temperature <- Temperature[,2]  # Just use the Temp values, which are in column 2
   last_day <- tail(Day, n = 1)  # get the total number of days
-  Day_Temp <- approx(Day,Temperature, n = last_day, method="linear")$x
-  Day_Temp <- Day_Temp[First_day:Last_day]
-  Temperature <- approx(Day,Temperature, n = last_day, method="linear")$y # interpolate temperature data
-  Temperature <- Temperature[First_day:Last_day]
+  Day_Temp <- interpolate_days(Day, Temperature, last_day, method="linear")
+  Day_Temp <- subset_to_range(Day_Temp, First_day, Last_day)
+  Temperature <- interpolate_linear(Day, Temperature, last_day)
+  Temperature <- subset_to_range(Temperature, First_day, Last_day)
   
   ########################################################################
-  ### Diet proportions and energetical contribution 
+  ### Diet proportions and energetical contribution
   ########################################################################
-  
-  if(file.exists(Diet_prop_File)){
-    Diet_prop <- read.csv(Diet_prop_File,head=TRUE, stringsAsFactors = FALSE)
-  } else {
-    print(paste("Cannot find Diet_prop_File: ",Diet_prop_File))
-    exit()
-  }
+
+  Diet_prop <- read_csv_with_header(Diet_prop_File, "Diet_prop_File")
   Day_prey <- Diet_prop[,1] # Days
-  if(file.exists(Prey_E_File)){
-    Prey_E <- read.csv(Prey_E_File,head=TRUE, stringsAsFactors = FALSE)
-  } else {
-    print(paste("Cannot find Prey_E_File: ",Prey_E_File))
-    exit()
-  }
+  Prey_E <- read_csv_with_header(Prey_E_File, "Prey_E_File")
   Day_Prey_E <- Prey_E[,1] # Days
   prey_items   <- (ncol(Diet_prop))-1  # number of prey items in Diet_prop file
   prey_items_E <- (ncol(Prey_E))-1     # number of prey items in Prey_E file
@@ -1007,12 +712,7 @@ shinyServer(function(input, output,session) {
   
   if(EGEQ == 3) {  # Only read file if EGEQ == 3
     # Fraction of each prey type that are indigestible (See Stewart et al. 1983)
-    if(file.exists(Indigestible_Prey_File)){
-      Ind_prey <- read.csv(Indigestible_Prey_File,head=TRUE, stringsAsFactors = FALSE)
-    } else {
-      print(paste("Cannot find Indigestible_Prey_File: ",Indigestible_Prey_File))
-      exit()
-    }
+    Ind_prey <- read_csv_with_header(Indigestible_Prey_File, "Indigestible_Prey_File")
     FB4.Param = append(FB4.Param, "Indigestible_Prey")
     FB4.Value = append(FB4.Value, as.character(Indigestible_Prey_File))  # record file used
     Day_ind_prey <- Ind_prey[,1] # Days
@@ -1042,12 +742,7 @@ shinyServer(function(input, output,session) {
   FB4.Value = append(FB4.Value,  PREDEDEQ)  # record Predator Energy Density Equation used
   
   if(PREDEDEQ == 1) {
-    if(file.exists(Predator_E_File)){
-      Predator_E <- read.csv(Predator_E_File,head=TRUE, stringsAsFactors = FALSE) 
-    } else {
-      print(paste("Cannot find Predator_E_File: ",Predator_E_File))
-      exit()
-    }
+    Predator_E <- read_csv_with_header(Predator_E_File, "Predator_E_File")
     FB4.Param = append(FB4.Param, "Predator_ED")
     FB4.Value = append(FB4.Value, as.character(Predator_E_File))  # record file used
     Day_pred <- Predator_E[,1] # Days
@@ -1079,12 +774,7 @@ shinyServer(function(input, output,session) {
   FB4.Param2 = ("calc.pop_mort")
   FB4.Value2 = (as.logical(calc.pop_mort))
   if(calc.pop_mort==TRUE){   # only read Mortality_File if needed
-    if(file.exists(Mortality_File)){
-      Mortality <- read.csv(Mortality_File,head=TRUE, stringsAsFactors = FALSE)
-    } else {
-      print(paste("Cannot find Mortality_File: ",Mortality_File))
-      exit()
-    }
+    Mortality <- read_csv_with_header(Mortality_File, "Mortality_File")
     FB4.Param2 = append(FB4.Param2, "Mortality_File")
     FB4.Value2 = append(FB4.Value2,  as.character(Mortality_File))  # record file used
     Day_mort <- Mortality[,1] # Days
@@ -1153,12 +843,7 @@ shinyServer(function(input, output,session) {
   FB4.Value2 = append(FB4.Value2, as.logical(calc.spawn))
   
   if(calc.spawn){
-    if(file.exists(Reproduction_File)){
-      Reproduction <- read.csv(Reproduction_File,head=TRUE, stringsAsFactors = FALSE)
-    } else {
-      print(paste("Cannot find Reproduction_File: ",Reproduction_File))
-      exit()
-    }
+    Reproduction <- read_csv_with_header(Reproduction_File, "Reproduction_File")
     FB4.Param2 = append(FB4.Param2, "Reproduction_File")
     FB4.Value2 = append(FB4.Value2, as.character(Reproduction_File))  # record file used
     Day <- Reproduction[,1] # Days
@@ -1462,24 +1147,7 @@ if(calc.nut==TRUE){  # only need to read these files if "(calc.nut == TRUE)"
   colnames(globalout_Nit_Conc_Prey) <- names(Nit_Conc_Prey)[-1]
 }  # end of if(calc.nut == TRUE)
 
-phosphorous_allocation <- function(C,p_conc_prey,AEp,weightgain,p_conc_pred) {
-  Cp <- C*p_conc_prey
-  Cpsum <- sum(Cp)
-  Gp <- weightgain*p_conc_pred
-  Up <- sum(AEp*Cp)-Gp
-  Fp <- Cpsum-Gp-Up
-  return(c(Cpsum,Gp,Up,Fp))
-}
-
-nitrogen_allocation <- function(C,n_conc_prey,AEn,weightgain,n_conc_pred) {
-  Cn <- C*n_conc_prey
-  Cnsum <- sum(Cn)
-  Gn <- weightgain*n_conc_pred
-  Un <- sum(AEn*Cn)-Gn
-  Fn <- Cnsum-Gn-Un
-  return(c(Cnsum,Gn,Un,Fn))
-}
-# end of nutrient regeneration
+# Nutrient allocation functions now loaded from R/sub_models/nutrients.R
 
 ########################################################################
 ### Daily Output File:  record values used for this run
