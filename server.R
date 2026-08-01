@@ -1,7 +1,9 @@
 require(shiny)
 
-# Fish Bioenergetics Model 4, version v1.1.7
-FB4.version = "v1.1.7"  # This version (v1.1.7) fixes an issue running FB4 without a DesignFile.
+# Fish Bioenergetics Model 4, version v1.1.8
+FB4.version = "v1.1.8"  # This version (v1.1.8) reorganizes the code, moving the model
+#  functions out of server.R and into separate files in the "R" folder; model output is unchanged.
+# Version (v1.1.7) fixes an issue running FB4 without a DesignFile.
 # Version (v1.1.6) adds the option for behavioral thermoregulation; if Design File has
 #  "Use_Thermoregulation" = TRUE, then fish avoids high T and moves to Thermoregulation_Temp.
 # Version (v1.1.5) adds the option to save daily output, by run, when using a Design File;
