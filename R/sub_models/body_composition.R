@@ -38,6 +38,6 @@ EnDen = function(Fat, Pro, W){
   ### Fat contains 36200 J/g
   ### Protein contains 23600 J/g
   ### Returns J/g wet weight
-  ED = (Fat.g*36200 + Pro.g*23600)/W  # J/g wet weight
+  ED = (Fat*36200 + Pro*23600)/W  # J/g wet weight
   return(ED)
 }

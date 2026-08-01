@@ -75,26 +75,32 @@ shinyServer(function(input, output,session) {
     ### Load modular function definitions
     ########################################################################
 
+    # local = TRUE is required: these functions were originally defined inline
+    # here, and several of them read model variables (Pred_E, alpha1, beta1,
+    # cutoff, DO_Sat.fr, phi_DT, Cw_tot, ...) from this enclosing environment.
+    # Sourcing without local = TRUE would define them in the global environment,
+    # where those variables do not exist.
+
     # Load I/O utilities
-    source("R/io/file_readers.R")
-    source("R/io/data_interpolation.R")
+    source("R/io/file_readers.R", local = TRUE)
+    source("R/io/data_interpolation.R", local = TRUE)
 
     # Load utility functions
-    source("R/simulation/utilities.R")
-    source("R/simulation/fitting.R")
-    source("R/simulation/growth_helpers.R")
+    source("R/simulation/utilities.R", local = TRUE)
+    source("R/simulation/fitting.R", local = TRUE)
+    source("R/simulation/growth_helpers.R", local = TRUE)
 
     # Load bioenergetics models
-    source("R/bioenergetics/consumption.R")
-    source("R/bioenergetics/respiration.R")
-    source("R/bioenergetics/sda.R")
-    source("R/bioenergetics/waste.R")
-    source("R/bioenergetics/energy_density.R")
+    source("R/bioenergetics/consumption.R", local = TRUE)
+    source("R/bioenergetics/respiration.R", local = TRUE)
+    source("R/bioenergetics/sda.R", local = TRUE)
+    source("R/bioenergetics/waste.R", local = TRUE)
+    source("R/bioenergetics/energy_density.R", local = TRUE)
 
     # Load sub-models
-    source("R/sub_models/body_composition.R")
-    source("R/sub_models/contaminants.R")
-    source("R/sub_models/nutrients.R")
+    source("R/sub_models/body_composition.R", local = TRUE)
+    source("R/sub_models/contaminants.R", local = TRUE)
+    source("R/sub_models/nutrients.R", local = TRUE)
     
     # Contaminant, fitting, and utility functions now loaded from R/ modules
 
